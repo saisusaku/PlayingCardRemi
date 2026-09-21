@@ -1,0 +1,7 @@
+<div style="width: 100%; height: 700px; border: none; overflow: hidden;">
+    <iframe 
+        src="https://remi-jauh-online.onrender.com" 
+        style="width: 100%; height: 100%; border: 0;" 
+        allowfullscreen>
+    </iframe>
+</div>
