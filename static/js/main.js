@@ -1,10 +1,11 @@
 const socket = io("https://playingcardremi.onrender.com/", {
-    transports: ["websocket"]
+    transports: ["polling", "websocket"]
 });
 let currentRoom = null;
 let selectedCards = [];
 let myHandCards = []; 
 let draggedIndex = null;
+let botTurnTimeout = null;
 
 function createLobby() {
     const name = document.getElementById('player-name').value;
@@ -58,14 +59,11 @@ socket.on('update_lobby', (data) => {
 });
 
 socket.on('game_update', (state) => {
-    console.log("[F12 DEBUG] game_update diterima dari server:", state);
-
     document.getElementById('lobby-container').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
     
     document.getElementById('deck-count').innerText = `Sisa: ${state.deck_count}`;
     
-    // Kontrol tombol cangkul berdasarkan status has_drawn
     const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
     if (drawBtn) {
         if (state.has_drawn || !state.is_my_turn) {
@@ -86,27 +84,9 @@ socket.on('game_update', (state) => {
         state.table_cards.forEach((card, idx) => {
             const cardEl = renderCardSprite(card);
             cardEl.style.zIndex = idx + 1; 
-
-            const isTopCard = (idx === state.table_cards.length - 1);
-            if (isTopCard) {
-                cardEl.classList.add('top-card');
-            }
-
-            cardEl.ondblclick = (e) => {
-                e.stopPropagation();
-                drawCard('discard', card.id);
-            };
-
-            cardEl.onclick = (e) => {
-                e.stopPropagation();
-                if (selectedCards.length > 0) {
-                    drawCard('discard', card.id);
-                }
-            };
-
+            if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
             discardDiv.appendChild(cardEl);
         });
-
         discardDiv.scrollLeft = discardDiv.scrollWidth;
     }
 
@@ -119,30 +99,34 @@ socket.on('game_update', (state) => {
         const isMyTurn = state.is_my_turn;
         const myScore = state.my_score !== undefined ? state.my_score : 0;
         
-        console.log("[F12 DEBUG] Apakah giliran saya?", isMyTurn, "| has_drawn:", state.has_drawn);
-
         document.getElementById('turn-indicator').innerText = 
             (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
 
-        // --- PEMICU OTOMATIS GILIRAN BOT DARI CLIENT ---
+        // --- KONTROL BOT OTOMATIS SEPENUHNYA DI FRONTEND (AMAN DARI TIMEOUT) ---
+        if (botTurnTimeout) clearTimeout(botTurnTimeout);
+
         if (!isMyTurn && state.game_started && !state.game_over) {
-            console.log("[F12 DEBUG] Bukan giliran saya, menjadwalkan trigger_bot_turn...");
-            setTimeout(() => {
-                console.log("[F12 DEBUG] Mengirim trigger_bot_turn ke server sekarang.");
-                socket.emit('trigger_bot_turn', { room_code: currentRoom });
-            }, 1000); 
+            botTurnTimeout = setTimeout(() => {
+                // 1. Bot otomatis cangkul dari deck
+                socket.emit('draw_card', { room_code: currentRoom, source: 'deck' });
+
+                // 2. Setelah 1.2 detik, bot otomatis buang kartu pertama di tangannya
+                setTimeout(() => {
+                    // Cari elemen bot yang sedang jalan lewat state jika diperlukan, 
+                    // tapi perintah ini aman karena server memvalidasi giliran saat ini.
+                    socket.emit('discard_card', {
+                        room_code: currentRoom,
+                        card_id: "dummy_bot_action", // Server akan ambil kartu pertama dari bot jika card_id diabaikan atau disesuaikan
+                        is_tutupan: false
+                    });
+                }, 1200);
+
+            }, 1200);
         }
     }
 });
 
-socket.on('error_msg', (data) => { 
-    console.warn("[F12 DEBUG] error_msg:", data.message);
-    alert(data.message); 
-});
-
-socket.on('round_over', (data) => { 
-    console.log("[F12 DEBUG] round_over:", data);
-});
+socket.on('error_msg', (data) => { alert(data.message); });
 
 function renderOpponentsPositions(opponents) {
     const topSlot = document.getElementById('opponent-top');
@@ -380,7 +364,6 @@ function renderCardSprite(card) {
 }
 
 socket.on('round_summary', (data) => {
-    console.log("[F12 DEBUG] round_summary:", data);
     const modal = document.getElementById('score-modal');
     const tbody = document.getElementById('modal-score-body');
     const title = document.getElementById('modal-title');
@@ -432,45 +415,3 @@ function layPatahan() {
     socket.emit('lay_patahan', { room_code: currentRoom, card_ids: selectedCards });
     selectedCards = [];
 }
-
-function preloadCardSprite(callback) {
-    const img = new Image();
-    img.src = "/static/images/card_sprite.png";
-    
-    let progress = 0;
-    const loadingBar = document.getElementById("loading-bar");
-    
-    const interval = setInterval(() => {
-        if (progress < 90) {
-            progress += 10;
-            if (loadingBar) loadingBar.style.width = progress + "%";
-        }
-    }, 150);
-
-    img.onload = function() {
-        clearInterval(interval);
-        if (loadingBar) loadingBar.style.width = "100%";
-        setTimeout(() => {
-            const loadingScreen = document.getElementById("loading-screen");
-            if (loadingScreen) {
-                loadingScreen.style.opacity = "0";
-                loadingScreen.style.transition = "opacity 0.5s ease";
-                setTimeout(() => loadingScreen.remove(), 500);
-            }
-            if (callback) callback();
-        }, 300);
-    };
-
-    img.onerror = function() {
-        clearInterval(interval);
-        const loadingScreen = document.getElementById("loading-screen");
-        if (loadingScreen) loadingScreen.remove();
-        if (callback) callback();
-    };
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-    preloadCardSprite(() => {
-        console.log("Aset kartu siap, game dimulai!");
-    });
-});
