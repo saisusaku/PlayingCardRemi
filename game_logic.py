@@ -317,14 +317,12 @@ class RemiGameState:
 
         p = self.players[sid]
         
-        # Jika pemain adalah BOT, abaikan syarat ketat has_drawn manual agar bot bisa otomatis jalan
         if not p.get('is_bot', False):
             if not self.has_drawn and not self.starter_must_discard:
                 return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
 
         if card_id == "auto_bot" and p.get('is_bot'):
             if len(p['hand']) > 0:
-                # Bot memilih kartu pertama di tangannya untuk dibuang
                 card = p['hand'][0]
             else:
                 return False, "Tangan bot kosong!", False, None
@@ -333,6 +331,19 @@ class RemiGameState:
             if not card:
                 return False, "Kartu tidak ada di tangan!", False, None
 
+        # VALIDASI KETAT ATURAN TUTUP (MENANG)
+        if is_tutupan:
+            # Sisa kartu di tangan setelah kartu ini dibuang harusnya 0 (artinya sebelum dibuang, di tangan sisa 1 kartu)
+            remaining_hand_count = len(p['hand']) - 1
+            
+            if remaining_hand_count > 0:
+                return False, "Belum bisa Tutup! Anda harus menurunkan semua Seri dan Patahan ke meja terlebih dahulu hingga sisa 1 kartu di tangan.", False, None
+            
+            # Opsional: Pastikan pemain sudah minimal menurunkan 1 seri murni agar sah menutup
+            if len(p['melds']['series']) == 0:
+                return False, "Belum bisa Tutup! Anda harus memiliki minimal 1 Seri Murni yang diturunkan ke meja.", False, None
+
+        # Eksekusi pembuangan kartu dari tangan
         p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
 
         if is_tutupan or len(p['hand']) == 0:
@@ -345,7 +356,6 @@ class RemiGameState:
             details, game_ended = self.calculate_scores()
             return True, "Permainan Selesai (Cangkulan Habis)!", game_ended, details
 
-        # Reset flag dan lanjutkan ke giliran berikutnya
         self.starter_must_discard = False
         self.next_turn()
         return True, "Kartu dibuang.", False, None
