@@ -58,11 +58,27 @@ socket.on('update_lobby', (data) => {
 });
 
 socket.on('game_update', (state) => {
+    console.log("[F12 DEBUG] game_update diterima dari server:", state);
+
     document.getElementById('lobby-container').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
     
     document.getElementById('deck-count').innerText = `Sisa: ${state.deck_count}`;
     
+    // Kontrol tombol cangkul berdasarkan status has_drawn
+    const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
+    if (drawBtn) {
+        if (state.has_drawn || !state.is_my_turn) {
+            drawBtn.disabled = true;
+            drawBtn.style.opacity = '0.5';
+            drawBtn.style.cursor = 'not-allowed';
+        } else {
+            drawBtn.disabled = false;
+            drawBtn.style.opacity = '1';
+            drawBtn.style.cursor = 'pointer';
+        }
+    }
+
     const discardDiv = document.getElementById('discard-pile');
     discardDiv.innerHTML = '';
 
@@ -103,21 +119,30 @@ socket.on('game_update', (state) => {
         const isMyTurn = state.is_my_turn;
         const myScore = state.my_score !== undefined ? state.my_score : 0;
         
+        console.log("[F12 DEBUG] Apakah giliran saya?", isMyTurn, "| has_drawn:", state.has_drawn);
+
         document.getElementById('turn-indicator').innerText = 
             (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
 
         // --- PEMICU OTOMATIS GILIRAN BOT DARI CLIENT ---
-        // Jika bukan giliran saya, beri jeda 1 detik lalu suruh server jalankan bot
         if (!isMyTurn && state.game_started && !state.game_over) {
+            console.log("[F12 DEBUG] Bukan giliran saya, menjadwalkan trigger_bot_turn...");
             setTimeout(() => {
+                console.log("[F12 DEBUG] Mengirim trigger_bot_turn ke server sekarang.");
                 socket.emit('trigger_bot_turn', { room_code: currentRoom });
             }, 1000); 
         }
     }
 });
 
-socket.on('error_msg', (data) => { alert(data.message); });
-socket.on('round_over', (data) => { alert(data.message); });
+socket.on('error_msg', (data) => { 
+    console.warn("[F12 DEBUG] error_msg:", data.message);
+    alert(data.message); 
+});
+
+socket.on('round_over', (data) => { 
+    console.log("[F12 DEBUG] round_over:", data);
+});
 
 function renderOpponentsPositions(opponents) {
     const topSlot = document.getElementById('opponent-top');
@@ -355,6 +380,7 @@ function renderCardSprite(card) {
 }
 
 socket.on('round_summary', (data) => {
+    console.log("[F12 DEBUG] round_summary:", data);
     const modal = document.getElementById('score-modal');
     const tbody = document.getElementById('modal-score-body');
     const title = document.getElementById('modal-title');
