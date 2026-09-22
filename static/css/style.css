@@ -207,14 +207,14 @@ button:hover { background: #219150; }
 
 /* SPRITE KARTU UTAMA */
 .card-sprite {
-    width: 71px;
-    height: 96px;
-    background-image: url('/static/images/card_sprite.png');
+    width: 68px;
+    height: 87px;
+    background-image: url('https://playingcardremi.onrender.com/static/images/card_sprite.png');
     background-size: 1045px 408px;
-    border-radius: 5px;
+    border-radius: 4px;
     cursor: grab;
     user-select: none;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.5);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
     position: relative;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
