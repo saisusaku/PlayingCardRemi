@@ -81,7 +81,9 @@ def handle_start_game(data):
         game.reset_game_scores()
         game.start_new_round()
         broadcast_game_state(room_code)
-        check_and_trigger_bot(room_code)
+        
+        # Jalankan trigger bot menggunakan eventlet background task agar aman dari timeout
+        socketio.start_background_task(check_and_trigger_bot, room_code)
 
 @socketio.on('draw_card')
 def handle_draw_card(data):
@@ -161,8 +163,8 @@ def handle_discard(data):
                 game.start_new_round()
                 broadcast_game_state(room_code)
 
-            # Pemicu giliran bot jika giliran berpindah ke bot
-            check_and_trigger_bot(room_code)
+            # Pemicu giliran bot di background task eventlet
+            socketio.start_background_task(check_and_trigger_bot, room_code)
 
 
 def check_and_trigger_bot(room_code):
@@ -185,7 +187,7 @@ def check_and_trigger_bot(room_code):
             if not curr_player.get('is_bot'):
                 break
 
-            socketio.sleep(0.8) # Jeda natural agar transisi bot terlihat halus
+            socketio.sleep(1.0) # Jeda natural agar transisi bot terlihat halus
 
             # 1. Bot Cangkul
             if not game.has_drawn:
