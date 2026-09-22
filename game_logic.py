@@ -242,9 +242,16 @@ class RemiGameState:
 
         p = self.players[sid]
         selected_hand_cards = [c for c in p['hand'] if c['id'] in (selected_hand_card_ids or [])]
+        
+        # GABUNGKAN KARTU DI TANGAN DAN KARTU DARI MEJA
         meld_combination = selected_hand_cards + [target_card]
 
         detected_meld_type = None
+
+        # PERBAIKAN: Urutkan terlebih dahulu kombinasi kartu numerik sebelum divalidasi 
+        # agar susunan acak dari player (misal 5, 3, 4 + 6) terbaca sah menjadi (3, 4, 5, 6)
+        sorted_meld_for_check = sorted(meld_combination, key=lambda c: NUMERIC_ORDER.get(c['rank'], 0) if c['type'] == 'normal' else 99)
+
         if is_valid_patahan_set(meld_combination):
             has_existing_series = len(p['melds']['series']) > 0
             is_four_aces = (len(meld_combination) == 4 and all(c['rank'] == 'A' for c in meld_combination))
@@ -252,16 +259,13 @@ class RemiGameState:
                 detected_meld_type = 'patahan'
             else:
                 return False, "Untuk Patahan harus sudah ada Seri Murni terlebih dahulu!"
-        elif is_valid_run_series(meld_combination):
+        elif is_valid_run_series(sorted_meld_for_check):  # Validasi menggunakan list yang sudah terurut
             detected_meld_type = 'series'
         else:
             return False, "Kombinasi tidak sah!"
 
-        # SIMULASI KARTU SISA: Setelah mengambil kartu meja dan menurunkan meld, tangan wajib menyisakan minimal 1 kartu untuk dibuang
-        current_hand_ids = [c['id'] for c in p['hand']]
-        taken_ids = [c['id'] for c in cards_to_take]
+        # SIMULASI KARTU SISA
         meld_ids = [c['id'] for c in meld_combination]
-        
         simulated_hand = [c for c in p['hand'] if c['id'] not in meld_ids] + cards_to_take
         if len(simulated_hand) == 0:
             return False, "Kartu di tangan harus menyisakan minimal 1 kartu untuk dibuang setelah mengambil dari meja!"
@@ -273,7 +277,7 @@ class RemiGameState:
         self.players[sid]['hand'] = [c for c in self.players[sid]['hand'] if c['id'] not in meld_ids]
         
         if detected_meld_type == 'series':
-            self.players[sid]['melds']['series'].append(meld_combination)
+            self.players[sid]['melds']['series'].append(sorted_meld_for_check)
         elif detected_meld_type == 'patahan':
             self.players[sid]['melds']['patahan'].append(meld_combination)
 
