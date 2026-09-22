@@ -1,12 +1,6 @@
-const socket = io("https://playingcardremi.onrender.com/", {
-    transports: ["polling", "websocket"],
-    upgrade: true,
-    rememberUpgrade: true,
-    reconnection: true,
-    reconnectionAttempts: 10,
-    reconnectionDelay: 500,
-    timeout: 20000
-});
+const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+const wsHost = "playingcardremi.onrender.com"; 
+const ws = new WebSocket(`${wsProtocol}${wsHost}`);
 
 let currentRoom = null;
 let selectedCards = [];
@@ -14,9 +8,47 @@ let myHandCards = [];
 let draggedIndex = null;
 let botTurnTimeout = null;
 
-socket.on("connect", () => {
-    console.log("[SOCKET] Terhubung ke server:", socket.id);
-});
+ws.onopen = () => {
+    console.log("[WS] Terhubung langsung secara kilat ke server!");
+};
+
+ws.onerror = (err) => {
+    console.error("[WS] Koneksi error:", err);
+};
+
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    if (data.type === 'room_created') {
+        currentRoom = data.room_code;
+        document.getElementById('display-room-code').innerText = currentRoom;
+        document.getElementById('lobby-room-info').style.display = 'block';
+        if(data.is_admin) document.getElementById('start-btn').style.display = 'block';
+    } 
+    else if (data.type === 'room_joined') {
+        currentRoom = data.room_code;
+        document.getElementById('display-room-code').innerText = currentRoom;
+        document.getElementById('lobby-room-info').style.display = 'block';
+    } 
+    else if (data.type === 'update_lobby') {
+        const list = document.getElementById('player-list');
+        list.innerHTML = '';
+        data.players.forEach(p => {
+            const li = document.createElement('li');
+            li.innerText = `${p.name} ${p.is_spectator ? '(Penonton)' : ''} - Skor: ${p.score}`;
+            list.appendChild(li);
+        });
+    } 
+    else if (data.type === 'game_update') {
+        handleGameUpdate(data);
+    } 
+    else if (data.type === 'error_msg') {
+        alert(data.message);
+    } 
+    else if (data.type === 'round_summary') {
+        handleRoundSummary(data);
+    }
+};
 
 function createLobby() {
     const name = document.getElementById('player-name').value;
@@ -25,13 +57,13 @@ function createLobby() {
     const isSpec = document.getElementById('is-spectator').checked;
     if(!name) return alert("Masukkan Nama!");
     
-    console.log("[LOBBY] Mengirim create_room...");
-    socket.emit('create_room', { 
-        name: name, 
-        joker_option: joker, 
-        bot_count_option: botCount, 
-        is_spectator: isSpec 
-    });
+    ws.send(JSON.stringify({
+        action: 'create_room',
+        name: name,
+        joker_option: joker,
+        bot_count_option: botCount,
+        is_spectator: isSpec
+    }));
 }
 
 function joinLobby() {
@@ -40,39 +72,22 @@ function joinLobby() {
     const isSpec = document.getElementById('is-spectator').checked;
     if(!name || !room) return alert("Isi Nama dan Kode Room!");
 
-    console.log("[LOBBY] Mengirim join_room:", room);
-    socket.emit('join_room', { name: name, room_code: room, is_spectator: isSpec });
+    ws.send(JSON.stringify({
+        action: 'join_room',
+        name: name,
+        room_code: room,
+        is_spectator: isSpec
+    }));
 }
 
 function startGame() {
-    console.log("[GAME] Memulai game untuk room:", currentRoom);
-    socket.emit('start_game', { room_code: currentRoom });
+    ws.send(JSON.stringify({
+        action: 'start_game',
+        room_code: currentRoom
+    }));
 }
 
-socket.on('room_created', (data) => {
-    currentRoom = data.room_code;
-    document.getElementById('display-room-code').innerText = currentRoom;
-    document.getElementById('lobby-room-info').style.display = 'block';
-    if(data.is_admin) document.getElementById('start-btn').style.display = 'block';
-});
-
-socket.on('room_joined', (data) => {
-    currentRoom = data.room_code;
-    document.getElementById('display-room-code').innerText = currentRoom;
-    document.getElementById('lobby-room-info').style.display = 'block';
-});
-
-socket.on('update_lobby', (data) => {
-    const list = document.getElementById('player-list');
-    list.innerHTML = '';
-    data.players.forEach(p => {
-        const li = document.createElement('li');
-        li.innerText = `${p.name} ${p.is_spectator ? '(Penonton)' : ''} - Skor: ${p.score}`;
-        list.appendChild(li);
-    });
-});
-
-socket.on('game_update', (state) => {
+function handleGameUpdate(state) {
     document.getElementById('lobby-container').style.display = 'none';
     document.getElementById('game-container').style.display = 'block';
     
@@ -120,22 +135,27 @@ socket.on('game_update', (state) => {
 
         if (!isMyTurn && state.game_started && !state.game_over) {
             botTurnTimeout = setTimeout(() => {
-                socket.emit('draw_card', { room_code: currentRoom, source: 'deck' });
+                // 1. Bot otomatis cangkul
+                ws.send(JSON.stringify({
+                    action: 'draw_card',
+                    room_code: currentRoom,
+                    source: 'deck'
+                }));
 
+                // 2. Bot otomatis buang kartu
                 setTimeout(() => {
-                    socket.emit('discard_card', {
+                    ws.send(JSON.stringify({
+                        action: 'discard_card',
                         room_code: currentRoom,
-                        card_id: "auto_bot", 
+                        card_id: "auto_bot",
                         is_tutupan: false
-                    });
+                    }));
                 }, 1000);
 
             }, 1000);
         }
     }
-});
-
-socket.on('error_msg', (data) => { alert(data.message); });
+}
 
 function renderOpponentsPositions(opponents) {
     const topSlot = document.getElementById('opponent-top');
@@ -298,18 +318,23 @@ function toggleSelectCard(cardId, element) {
 
 function drawCard(source, cardId=null) {
     if (source === 'deck') {
-        socket.emit('draw_card', { room_code: currentRoom, source: 'deck' });
+        ws.send(JSON.stringify({
+            action: 'draw_card',
+            room_code: currentRoom,
+            source: 'deck'
+        }));
     } else if (source === 'discard') {
         if (selectedCards.length === 0) {
             return alert("Pilih minimal 2 kartu pasangan di tangan Anda terlebih dahulu!");
         }
 
-        socket.emit('draw_card', {
+        ws.send(JSON.stringify({
+            action: 'draw_card',
             room_code: currentRoom,
             source: 'discard',
             card_id: cardId,
             selected_hand_card_ids: selectedCards
-        });
+        }));
         
         selectedCards = [];
     }
@@ -317,7 +342,21 @@ function drawCard(source, cardId=null) {
 
 function laySeries() {
     if(selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Seri!");
-    socket.emit('lay_series', { room_code: currentRoom, card_ids: selectedCards });
+    ws.send(JSON.stringify({
+        action: 'lay_series',
+        room_code: currentRoom,
+        card_ids: selectedCards
+    }));
+    selectedCards = [];
+}
+
+function layPatahan() {
+    if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
+    ws.send(JSON.stringify({
+        action: 'lay_patahan',
+        room_code: currentRoom,
+        card_ids: selectedCards
+    }));
     selectedCards = [];
 }
 
@@ -328,11 +367,12 @@ function discardSelectedCard(isTutupan) {
     
     const cardToDiscard = selectedCards[selectedCards.length - 1];
     
-    socket.emit('discard_card', { 
-        room_code: currentRoom, 
-        card_id: cardToDiscard, 
-        is_tutupan: isTutupan 
-    });
+    ws.send(JSON.stringify({
+        action: 'discard_card',
+        room_code: currentRoom,
+        card_id: cardToDiscard,
+        is_tutupan: isTutupan
+    }));
     
     selectedCards = [];
 }
@@ -370,7 +410,7 @@ function renderCardSprite(card) {
     return div;
 }
 
-socket.on('round_summary', (data) => {
+function handleRoundSummary(data) {
     const modal = document.getElementById('score-modal');
     const tbody = document.getElementById('modal-score-body');
     const title = document.getElementById('modal-title');
@@ -415,10 +455,4 @@ socket.on('round_summary', (data) => {
             modal.style.display = 'none';
         }
     }, 1000);
-});
-
-function layPatahan() {
-    if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
-    socket.emit('lay_patahan', { room_code: currentRoom, card_ids: selectedCards });
-    selectedCards = [];
 }
