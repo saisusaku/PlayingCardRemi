@@ -79,6 +79,7 @@ def handle_start_game(data):
         game.game_started = True
         game.reset_game_scores()
         game.start_new_round()
+        print(f"[DEBUG] Game dimulai di room {room_code}. Giliran aktif: {game.get_current_player_sid()}")
         broadcast_game_state(room_code)
 
 @socketio.on('draw_card')
@@ -169,12 +170,16 @@ def handle_trigger_bot(data):
     curr_sid = game.get_current_player_sid()
     curr_player = game.players.get(curr_sid, {})
     
+    print(f"[DEBUG] trigger_bot_turn dipanggil. Giliran saat ini: {curr_sid} ({curr_player.get('name')}), is_bot: {curr_player.get('is_bot')}")
+
     if not curr_player.get('is_bot'):
         return
 
+    # 1. Bot Cangkul otomatis jika belum mencangkul
     if not game.has_drawn:
         if len(game.deck) > 0:
             game.draw_from_deck(curr_sid)
+            print(f"[DEBUG] Bot {curr_player.get('name')} berhasil mencangkul.")
             broadcast_game_state(room_code)
             return
         else:
@@ -184,12 +189,14 @@ def handle_trigger_bot(data):
             broadcast_game_state(room_code)
             return
 
+    # 2. Bot Buang Kartu otomatis
     bot_p = game.players[curr_sid]
     details = None
     if len(bot_p['hand']) > 0:
         card_to_discard = bot_p['hand'][0]['id']
         is_tutupan = (len(bot_p['hand']) == 1)
         success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
+        print(f"[DEBUG] Bot {curr_player.get('name')} membuang kartu {card_to_discard}. Hasil: {msg}")
 
     broadcast_game_state(room_code)
 
@@ -242,7 +249,9 @@ def broadcast_game_state(room_code):
                     'hand_count': len(pl['hand'])
                 } for pl_sid, pl in game.players.items() if pl_sid != sid and not pl['is_spectator']],
                 'is_my_turn': (curr_turn_sid == sid),
-                'has_drawn': game.has_drawn
+                'has_drawn': game.has_drawn,
+                'game_started': game.game_started,
+                'game_over': game.game_over
             }
         emit('game_update', state, to=sid)
 
