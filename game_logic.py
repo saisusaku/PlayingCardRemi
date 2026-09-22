@@ -195,9 +195,13 @@ class RemiGameState:
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
-        # Set status awal ronde: Pemain pertama mendapat 8 kartu dan wajib membuang terlebih dahulu
-        self.has_drawn = True
-        self.starter_must_discard = True
+        # Cek apakah starter adalah bot atau player manusia
+        starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
+        
+        # Jika starter adalah pemain manusia, dia sudah memegang 8 kartu (dianggap sudah drawn untuk dibuang)
+        # Jika starter adalah bot, biarkan statusnya diproses oleh bot loop
+        self.has_drawn = True if not starter_is_bot else False
+        self.starter_must_discard = True if not starter_is_bot else False
 
     def get_current_player_sid(self):
         if not self.player_order:
@@ -210,8 +214,10 @@ class RemiGameState:
         self.current_turn_index = (self.current_turn_index + 1) % len(self.player_order)
 
     def draw_from_deck(self, sid):
-        if self.get_current_player_sid() != sid or self.has_drawn:
-            return False, "Bukan giliran Anda atau Anda sudah mengambil kartu!"
+        if self.get_current_player_sid() != sid:
+            return False, "Bukan giliran Anda!"
+        
+        # Longgarkan validasi has_drawn agar jika tombol tertekan dua kali tidak error/macet
         if len(self.deck) == 0:
             return False, "Cangkulan sudah habis!"
         
@@ -221,8 +227,8 @@ class RemiGameState:
         return True, "Kartu berhasil dicangkul."
 
     def draw_from_discard(self, sid, card_id, selected_hand_card_ids=None):
-        if self.get_current_player_sid() != sid or self.has_drawn:
-            return False, "Bukan giliran Anda atau Anda sudah mengambil kartu!"
+        if self.get_current_player_sid() != sid:
+            return False, "Bukan giliran Anda!"
 
         card_indices = [i for i, c in enumerate(self.discard_pile) if c['id'] == card_id]
         if not card_indices:
@@ -298,8 +304,8 @@ class RemiGameState:
         return True, "Patahan berhasil diturunkan!"
 
     def discard_card(self, sid, card_id, is_tutupan=False):
-        if self.get_current_player_sid() != sid or not self.has_drawn:
-            return False, "Anda belum mengambil kartu!", False, None
+        if self.get_current_player_sid() != sid:
+            return False, "Bukan giliran Anda!", False, None
 
         p = self.players[sid]
         card = next((c for c in p['hand'] if c['id'] == card_id), None)
