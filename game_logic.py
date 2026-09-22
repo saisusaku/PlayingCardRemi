@@ -181,21 +181,20 @@ class RemiGameState:
         starter_sid = self.player_order[start_idx]
 
         for sid in self.player_order:
-            # Semua pemain awal mendapakan 7 kartu standar terlebih dahulu
+            # Semua pemain awal mendapatkan 7 kartu standar terlebih dahulu
             count = 7
             for _ in range(count):
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
-        # KHUSUS PEMAIN PERTAMA (STARTER): Mendapatkan kartu ke-8 sebagai bonus cangkulan pertama
-        # Agar adil dan bot/pemain bisa langsung jalan
+        # KHUSUS PEMAIN PERTAMA (STARTER): Mendapatkan kartu ke-8
         starter_player = self.players[starter_sid]
         if self.deck:
             starter_player['hand'].append(self.deck.pop())
 
-        # Set has_drawn = False agar giliran pertama (baik bot maupun manusia) berjalan normal
-        # di mana mereka bisa langsung menurunkan kombinasi atau langsung membuang kartu ke-8 nya.
-        self.has_drawn = False
+        # KEMBALIKAN KE TRUE: Karena pemain pertama sudah memegang 8 kartu, 
+        # dia dianggap "sudah punya kartu jalan" dan siap membuang atau menurunkan meld tanpa cangkul lagi.
+        self.has_drawn = True
         self.starter_must_discard = True
 
     def get_current_player_sid(self):
@@ -314,7 +313,8 @@ class RemiGameState:
 
         p = self.players[sid]
         
-        if not self.has_drawn and not p.get('is_bot', False):
+        # Izinkan pembuangan jika sudah draw ATAU jika ini adalah giliran pertama pemain starter (starter_must_discard)
+        if not self.has_drawn and not self.starter_must_discard and not p.get('is_bot', False):
             return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
 
         if card_id == "auto_bot" and p.get('is_bot'):
@@ -339,6 +339,8 @@ class RemiGameState:
             details, game_ended = self.calculate_scores()
             return True, "Permainan Selesai (Cangkulan Habis)!", game_ended, details
 
+        # Reset flag starter_must_discard setelah giliran pertama selesai
+        self.starter_must_discard = False
         self.next_turn()
         return True, "Kartu dibuang.", False, None
 
