@@ -27,6 +27,7 @@ def handle_create_room(data):
     rooms[room_code] = game
 
     join_room(room_code)
+    print(f"[ROOM] Room dibuat: {room_code} oleh {name}")
     emit('room_created', {
         'room_code': room_code,
         'is_admin': True,
@@ -51,6 +52,7 @@ def handle_join_room(data):
 
     game.add_player(request.sid, name, is_spectator)
     join_room(room_code)
+    print(f"[ROOM] {name} bergabung ke room {room_code}")
 
     is_admin = (game.admin_sid == request.sid)
     emit('room_joined', {
@@ -79,7 +81,7 @@ def handle_start_game(data):
         game.game_started = True
         game.reset_game_scores()
         game.start_new_round()
-        print(f"[DEBUG] Game dimulai di room {room_code}. Giliran aktif: {game.get_current_player_sid()}")
+        print(f"[GAME] Dimulai di room {room_code}. Giliran pertama: {game.get_current_player_sid()}")
         broadcast_game_state(room_code)
 
 @socketio.on('draw_card')
@@ -91,6 +93,7 @@ def handle_draw_card(data):
 
     if room_code in rooms:
         game = rooms[room_code]
+        print(f"[ACTION] draw_card dipanggil oleh {request.sid} dari source: {from_source}")
         if from_source == 'deck':
             success, msg = game.draw_from_deck(request.sid)
         else:
@@ -100,8 +103,10 @@ def handle_draw_card(data):
             )
 
         if not success:
+            print(f"[ACTION FAILED] draw_card error: {msg}")
             emit('error_msg', {'message': msg})
         else:
+            print(f"[ACTION SUCCESS] draw_card sukses: {msg}")
             broadcast_game_state(room_code)
             
 @socketio.on('lay_patahan')
@@ -138,11 +143,14 @@ def handle_discard(data):
 
     if room_code in rooms:
         game = rooms[room_code]
+        print(f"[ACTION] discard_card dipanggil oleh {request.sid}, kartu: {card_id}")
         success, msg, game_ended, details = game.discard_card(request.sid, card_id, is_tutupan)
         
         if not success:
+            print(f"[ACTION FAILED] discard error: {msg}")
             emit('error_msg', {'message': msg})
         else:
+            print(f"[ACTION SUCCESS] discard sukses. Game ended: {game_ended}")
             broadcast_game_state(room_code)
             
             if details is not None:
@@ -170,16 +178,16 @@ def handle_trigger_bot(data):
     curr_sid = game.get_current_player_sid()
     curr_player = game.players.get(curr_sid, {})
     
-    print(f"[DEBUG] trigger_bot_turn dipanggil. Giliran saat ini: {curr_sid} ({curr_player.get('name')}), is_bot: {curr_player.get('is_bot')}")
-
     if not curr_player.get('is_bot'):
         return
+
+    print(f"[BOT TURN] Menjalankan giliran bot: {curr_sid} ({curr_player.get('name')})")
 
     # 1. Bot Cangkul otomatis jika belum mencangkul
     if not game.has_drawn:
         if len(game.deck) > 0:
             game.draw_from_deck(curr_sid)
-            print(f"[DEBUG] Bot {curr_player.get('name')} berhasil mencangkul.")
+            print(f"[BOT ACTION] Bot {curr_player.get('name')} berhasil mencangkul.")
             broadcast_game_state(room_code)
             return
         else:
@@ -196,7 +204,7 @@ def handle_trigger_bot(data):
         card_to_discard = bot_p['hand'][0]['id']
         is_tutupan = (len(bot_p['hand']) == 1)
         success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
-        print(f"[DEBUG] Bot {curr_player.get('name')} membuang kartu {card_to_discard}. Hasil: {msg}")
+        print(f"[BOT ACTION] Bot {curr_player.get('name')} membuang kartu: {card_to_discard}")
 
     broadcast_game_state(room_code)
 
