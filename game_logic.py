@@ -17,7 +17,6 @@ FACE_ORDER = {rank: idx for idx, rank in enumerate(FACE_RANKS)}
 
 def create_deck(joker_count=0):
     deck = []
-    # 52 Kartu Standar
     for suit_idx, suit in enumerate(SUITS):
         for rank_idx, rank in enumerate(RANKS):
             deck.append({
@@ -25,18 +24,17 @@ def create_deck(joker_count=0):
                 'suit': suit,
                 'rank': rank,
                 'type': 'normal',
-                'sprite_col': rank_idx + 1,  # Kolom 1 = '2' hingga Kolom 13 = 'A'
+                'sprite_col': rank_idx + 1,
                 'sprite_row': suit_idx
             })
     
-    # Kartu Joker
     for i in range(joker_count):
         deck.append({
             'id': f"joker_{i+1}",
             'suit': 'joker',
             'rank': 'JOKER',
             'type': 'joker',
-            'sprite_col': 0,             # Kolom 0 dialokasikan untuk Joker/Back
+            'sprite_col': 0,
             'sprite_row': 1 if i % 2 == 0 else 2
         })
         
@@ -104,7 +102,6 @@ def is_valid_patahan_set(cards):
 
 
 def find_possible_melds_for_bot(hand, has_existing_series=False):
-    # Dinonaktifkan total agar tidak memicu memory overload / SIGKILL di Render
     return None, None
 
 
@@ -147,7 +144,6 @@ class RemiGameState:
             }
 
     def reset_game_scores(self):
-        """ Reset total skor saat New Game / Pemenang 500 Poin tercapai """
         for p in self.players.values():
             p['score'] = 0
         self.first_round = True
@@ -157,12 +153,10 @@ class RemiGameState:
         self.deck = create_deck(self.joker_option)
         self.discard_pile = []
 
-        # RESET BERSIH SEMUA TANGAN DAN MELDS PEMAIN
         for sid in self.player_order:
             self.players[sid]['hand'] = []
             self.players[sid]['melds'] = {'series': [], 'patahan': []}
 
-        # Tentukan giliran awal di ronde baru
         if self.first_round or not self.highest_scorer_prev or self.highest_scorer_prev not in self.player_order:
             start_idx = random.randint(0, len(self.player_order) - 1)
         else:
@@ -171,16 +165,15 @@ class RemiGameState:
         self.current_turn_index = start_idx
         starter_sid = self.player_order[start_idx]
 
-        # Bagikan kartu ke masing-masing pemain
         for sid in self.player_order:
             count = 8 if sid == starter_sid else 7
             for _ in range(count):
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
-        # Cek apakah starter adalah bot atau player manusia
         starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
         
+        # Jika giliran pertama memegang 8 kartu (bukan bot), langsung anggap sudah mencangkul (has_drawn = True)
         self.has_drawn = True if not starter_is_bot else False
         self.starter_must_discard = True if not starter_is_bot else False
 
@@ -198,11 +191,16 @@ class RemiGameState:
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
         
+        p = self.players[sid]
+        # Pastikan pemain yang memegang 8 kartu di awal tidak bisa mencangkul
+        if len(p['hand']) >= 8 and not p.get('is_bot'):
+            return False, "Anda sudah memegang 8 kartu di awal ronde, silakan buang kartu!"
+        
         if len(self.deck) == 0:
             return False, "Cangkulan sudah habis!"
         
         card = self.deck.pop()
-        self.players[sid]['hand'].append(card)
+        p['hand'].append(card)
         self.has_drawn = True
         return True, "Kartu berhasil dicangkul."
 
@@ -306,33 +304,6 @@ class RemiGameState:
 
         self.next_turn()
         return True, "Kartu dibuang.", False, None
-
-    def process_bot_turn(self, bot_sid):
-        """ EKSEKUSI GILIRAN BOT OTOMATIS (BODOH & AMAN) """
-        if self.get_current_player_sid() != bot_sid:
-            return False, "Bukan giliran bot"
-
-        bot = self.players.get(bot_sid)
-        if not bot or not bot.get('is_bot'):
-            return False, "Bukan bot"
-
-        # 1. Bot Cangkul
-        if not self.has_drawn:
-            if len(self.deck) > 0:
-                self.draw_from_deck(bot_sid)
-            else:
-                details, game_ended = self.calculate_scores()
-                return True, "Permainan Selesai (Cangkulan Habis)"
-
-        # 2. Bot Langsung Buang Kartu Pertama
-        if len(bot['hand']) > 0:
-            discard_card_obj = bot['hand'][0]
-            is_tutupan = (len(bot['hand']) == 1)
-            
-            success, msg, game_ended, details = self.discard_card(bot_sid, discard_card_obj['id'], is_tutupan)
-            return success, msg
-
-        return False, "Gagal buang kartu bot"
 
     def calculate_scores(self, winner_sid=None, tutupan_card=None):
         score_details = []
