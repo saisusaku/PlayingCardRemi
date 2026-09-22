@@ -6,7 +6,6 @@ let currentRoom = null;
 let selectedCards = [];
 let myHandCards = []; 
 let draggedIndex = null;
-let botTurnTimeout = null;
 
 ws.onopen = () => {
     console.log("[WS] Terhubung langsung secara kilat ke server!");
@@ -130,30 +129,6 @@ function handleGameUpdate(state) {
         
         document.getElementById('turn-indicator').innerText = 
             (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
-
-        if (botTurnTimeout) clearTimeout(botTurnTimeout);
-
-        if (!isMyTurn && state.game_started && !state.game_over) {
-            botTurnTimeout = setTimeout(() => {
-                // 1. Bot otomatis cangkul
-                ws.send(JSON.stringify({
-                    action: 'draw_card',
-                    room_code: currentRoom,
-                    source: 'deck'
-                }));
-
-                // 2. Bot otomatis buang kartu
-                setTimeout(() => {
-                    ws.send(JSON.stringify({
-                        action: 'discard_card',
-                        room_code: currentRoom,
-                        card_id: "auto_bot",
-                        is_tutupan: false
-                    }));
-                }, 1000);
-
-            }, 1000);
-        }
     }
 }
 
