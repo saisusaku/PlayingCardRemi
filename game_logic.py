@@ -102,7 +102,7 @@ def is_valid_patahan_set(cards):
 
 
 class RemiGameState:
-    def __init__(self, room_id, joker_option=0, target_bot_count=3):
+    def __init__(self, room_id, joker_option=0, target_bot_count=1):
         self.room_id = room_id
         self.joker_option = joker_option
         self.target_bot_count = target_bot_count
@@ -168,7 +168,6 @@ class RemiGameState:
                     self.players[sid]['hand'].append(self.deck.pop())
 
         starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
-        
         self.has_drawn = True if not starter_is_bot else False
         self.starter_must_discard = True if not starter_is_bot else False
 
@@ -280,11 +279,19 @@ class RemiGameState:
             return False, "Bukan giliran Anda!", False, None
 
         p = self.players[sid]
-        card = next((c for c in p['hand'] if c['id'] == card_id), None)
-        if not card:
-            return False, "Kartu tidak ada di tangan!", False, None
+        
+        # Jika dipanggil dari bot frontend dengan keyword khusus
+        if card_id == "auto_bot" and p.get('is_bot'):
+            if len(p['hand']) > 0:
+                card = p['hand'][0]
+            else:
+                return False, "Tangan bot kosong!", False, None
+        else:
+            card = next((c for c in p['hand'] if c['id'] == card_id), None)
+            if not card:
+                return False, "Kartu tidak ada di tangan!", False, None
 
-        p['hand'] = [c for c in p['hand'] if c['id'] != card_id]
+        p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
 
         if is_tutupan or len(p['hand']) == 0:
             details, game_ended = self.calculate_scores(winner_sid=sid, tutupan_card=card)
