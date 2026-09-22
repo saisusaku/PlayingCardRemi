@@ -151,7 +151,6 @@ def handle_discard(data):
                     'delay': 5
                 }, to=room_code)
 
-                # Reset ronde baru jika permainan selesai
                 if game_ended:
                     game.reset_game_scores()
                 game.start_new_round()
@@ -173,7 +172,6 @@ def handle_trigger_bot(data):
     if not curr_player.get('is_bot'):
         return
 
-    # 1. Bot Cangkul otomatis jika belum mencangkul
     if not game.has_drawn:
         if len(game.deck) > 0:
             game.draw_from_deck(curr_sid)
@@ -186,7 +184,6 @@ def handle_trigger_bot(data):
             broadcast_game_state(room_code)
             return
 
-    # 2. Bot Buang Kartu otomatis
     bot_p = game.players[curr_sid]
     details = None
     if len(bot_p['hand']) > 0:
