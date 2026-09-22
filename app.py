@@ -207,6 +207,11 @@ async def handler(websocket):
                     game.start_new_round()
                     await broadcast_game_state(room_code)
 
+                    # PASTIKAN BOT LANGSUNG TERPICU JIKA PEMAIN PERTAMA ADALAH BOT
+                    curr_sid = game.get_current_player_sid()
+                    if game.players.get(curr_sid, {}).get('is_bot', False):
+                        asyncio.create_task(process_bot_turns(room_code))
+
             elif action == "draw_card":
                 room_code = data.get("room_code")
                 from_source = data.get("source", "deck")
