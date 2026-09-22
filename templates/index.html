@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Remi / Jauh Online</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+
+    <!-- LOBBY CONTAINER -->
+    <div id="lobby-container" class="panel">
+        <h1>🎴 Remi / Jauh Online</h1>
+        <div class="form-group">
+            <label>Nama Pemain:</label>
+            <input type="text" id="player-name" placeholder="Masukkan nama..." required>
+        </div>
+        <div class="form-group">
+            <label>Jumlah Bot (isi slot kosong):</label>
+            <select id="bot-count-option">
+                <option value="1">1 Bot ( Total 2 Pemain )</option>
+                <option value="2">2 Bot ( Total 3 Pemain )</option>
+                <option value="3" selected>3 Bot ( Total 4 Pemain )</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Opsi Joker:</label>
+            <select id="joker-option">
+                <option value="0">Tanpa Joker</option>
+                <option value="1">1 Joker</option>
+                <option value="2">2 Joker</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="is-spectator"> Masuk sebagai Penonton (Spectator)
+            </label>
+        </div>
+        <div class="button-group">
+            <button onclick="createLobby()">Buat Lobby</button>
+            <button onclick="joinLobby()">Gabung Lobby</button>
+        </div>
+        <input type="text" id="room-code-input" placeholder="Kode Room (untuk gabung)">
+        
+        <div id="lobby-room-info" style="display:none; margin-top: 15px;">
+            <h3>Kode Room: <span id="display-room-code"></span></h3>
+            <h4>Daftar Pemain dalam Lobby:</h4>
+            <ul id="player-list"></ul>
+            <button id="start-btn" style="display:none;" onclick="startGame()">Mulai Permainan</button>
+        </div>
+    </div>
+
+    <!-- GAME TABLE CONTAINER -->
+    <div id="game-container" style="display:none;">
+        <div class="poker-table">
+            
+            <!-- AREA LAWAN ATAS -->
+            <div id="opponent-top" class="opponent-slot top-slot"></div>
+
+            <!-- AREA MIDDLE (KIRI, MEJA TENGAH, KANAN) -->
+            <div class="middle-layout">
+                <!-- LAWAN KIRI -->
+                <div id="opponent-left" class="opponent-slot side-slot"></div>
+
+                <!-- MEJA TENGAH -->
+                <div class="center-table">
+                    <div class="deck-stack" onclick="drawCard('deck')">
+                        <div class="card-back"></div>
+                        <span id="deck-count">Sisa: 0</span>
+                    </div>
+                    <div class="discard-area">
+                        <div class="discard-title">KARTU TERBUKA DI MEJA</div>
+                        <div id="discard-pile" class="card-stack-horizontal"></div>
+                    </div>
+                </div>
+
+                <!-- LAWAN KANAN -->
+                <div id="opponent-right" class="opponent-slot side-slot"></div>
+            </div>
+
+            <!-- AREA PLAYER BAWAH -->
+            <div class="player-bottom">
+                <div class="player-header">
+                    <h3>Kartu Anda (<span id="turn-indicator"></span>)</h3>
+                </div>
+                
+                <div id="my-hand" class="card-row"></div>
+
+                <div class="action-buttons">
+                    <button onclick="drawCard('deck')">Cangkul 1 Kartu</button>
+                    <button onclick="laySeries()">Turunkan Seri</button>
+                    <button onclick="layPatahan()">Turunkan Patahan</button> <!-- TAMBAHKAN TOMBOL INI -->
+                    <button onclick="sortHand()">⚡ Susun Kartu (Auto)</button>
+                    <button onclick="discardSelectedCard(false)">Buang Kartu</button>
+                    <button onclick="discardSelectedCard(true)" class="btn-win">Tutup (Menang)</button>
+                </div>
+
+                <!-- SERI & PATAHAN DIPINDAHKAN KE BAWAH DIBAWAH MENU -->
+                <div class="melds-container" style="margin-top: 10px;">
+                    <div class="melds-title">SERI & PATAHAN ANDA</div>
+                    <div id="my-melds" class="melds-row"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL SCORE SUMMARY -->
+    <div id="score-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
+        <div style="background:#1e1e1e; padding:25px; border-radius:12px; width:90%; max-width:550px; text-align:center; box-shadow:0 0 25px #27ae60;">
+            <h2 id="modal-title" style="color:#f1c40f; margin-top:0;">📋 HASIL RONDE</h2>
+            
+            <table style="width:100%; color:#fff; border-collapse:collapse; margin:15px 0; font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:2px solid #444; color:#a0aec0;">
+                        <th style="padding:8px; text-align:left;">Pemain</th>
+                        <th style="padding:8px;">Turun</th>
+                        <th style="padding:8px;">Tangan</th>
+                        <th style="padding:8px;">Tutup</th>
+                        <th style="padding:8px;">Ronde</th>
+                        <th style="padding:8px; color:#2ecc71;">TOTAL</th>
+                    </tr>
+                </thead>
+                <tbody id="modal-score-body"></tbody>
+            </table>
+
+            <div style="font-size:14px; color:#e2e8f0; margin-top:10px;">
+                <span id="countdown-timer" style="color:#e74c3c; font-weight:bold; font-size:16px;">5</span> detik lagi ronde berikutnya dimulai...
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/main.js"></script>
+</body>
+</html>
