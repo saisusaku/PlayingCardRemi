@@ -21,6 +21,10 @@ function createLobby() {
     });
 }
 
+// Preload gambar sprite kartu di awal
+const preloadCardSprite = new Image();
+preloadCardSprite.src = '/static/images/card_sprite.png';
+
 function joinLobby() {
     const name = document.getElementById('player-name').value;
     const room = document.getElementById('room-code-input').value;
