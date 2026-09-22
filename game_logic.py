@@ -280,6 +280,10 @@ class RemiGameState:
 
         p = self.players[sid]
         
+        # VALIDASI: Pemain wajib cangkul/mengambil kartu terlebih dahulu pada giliran ini
+        if not self.has_drawn and not p.get('is_bot', False):
+            return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
+        
         # Jika dipanggil dari bot frontend dengan keyword khusus
         if card_id == "auto_bot" and p.get('is_bot'):
             if len(p['hand']) > 0:
