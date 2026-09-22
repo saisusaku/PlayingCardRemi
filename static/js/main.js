@@ -297,9 +297,21 @@ function laySeries() {
     selectedCards = [];
 }
 
+// PERBAIKAN PADA FUNGSI DISCARD
 function discardSelectedCard(isTutupan) {
-    if(selectedCards.length !== 1) return alert("Pilih 1 kartu untuk dibuang!");
-    socket.emit('discard_card', { room_code: currentRoom, card_id: selectedCards[0], is_tutupan: isTutupan });
+    if (selectedCards.length === 0) {
+        return alert("Pilih 1 kartu untuk dibuang!");
+    }
+    
+    // Ambil kartu terakhir yang dipilih untuk dibuang
+    const cardToDiscard = selectedCards[selectedCards.length - 1];
+    
+    socket.emit('discard_card', { 
+        room_code: currentRoom, 
+        card_id: cardToDiscard, 
+        is_tutupan: isTutupan 
+    });
+    
     selectedCards = [];
 }
 
@@ -328,7 +340,7 @@ const CARD_X_OFFSETS = [
     452,  // Kolom 6 (Angka 7)
     525,  // Kolom 7 (Angka 8)
     600,  // Kolom 8 (Angka 9)
-    672,  // Kolom 9 (Angka 10)/
+    672,  // Kolom 9 (Angka 10)
     747,  // Kolom 10 (Jack)
     819,  // Kolom 11 (Queen)
     894,  // Kolom 12 (King)
@@ -337,7 +349,7 @@ const CARD_X_OFFSETS = [
 
 // Koordinat Y presisi untuk setiap suit (Row 0 s/d 3)
 const CARD_Y_OFFSETS = [
-    9,   // Baris 0 (Clubs)
+    9,    // Baris 0 (Clubs)
     109,  // Baris 1 (Spades)
     209,  // Baris 2 (Hearts)
     311   // Baris 3 (Diamonds)
@@ -401,14 +413,12 @@ socket.on('round_summary', (data) => {
     }, 1000);
 });
 
-// TAMBAHKAN FUNGSI INI DI main.js
 function layPatahan() {
     if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
     socket.emit('lay_patahan', { room_code: currentRoom, card_ids: selectedCards });
     selectedCards = [];
 }
 
-// Fungsi untuk memuat gambar sprite terlebih dahulu
 function preloadCardSprite(callback) {
     const img = new Image();
     img.src = "https://playingcardremi.onrender.com/static/images/card_sprite.png";
@@ -416,7 +426,6 @@ function preloadCardSprite(callback) {
     let progress = 0;
     const loadingBar = document.getElementById("loading-bar");
     
-    // Simulasi progress bar berjalan mulus
     const interval = setInterval(() => {
         if (progress < 90) {
             progress += 10;
@@ -440,14 +449,12 @@ function preloadCardSprite(callback) {
 
     img.onerror = function() {
         clearInterval(interval);
-        // Jika gagal tetap hilangkan loading agar pemain tidak terjebak
         const loadingScreen = document.getElementById("loading-screen");
         if (loadingScreen) loadingScreen.remove();
         if (callback) callback();
     };
 }
 
-// Jalankan saat halaman dibuka
 window.addEventListener("DOMContentLoaded", () => {
     preloadCardSprite(() => {
         console.log("Aset kartu siap, game dimulai!");
