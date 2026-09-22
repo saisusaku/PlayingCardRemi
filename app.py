@@ -7,6 +7,51 @@ from game_logic import RemiGameState
 
 rooms = {}
 
+async def process_bot_turns(room_code):
+    """Fungsi otomatis untuk menjalankan giliran bot secara berurutan di server"""
+    await asyncio.sleep(1.0) # Beri jeda sejenak
+    while room_code in rooms:
+        game = rooms[room_code]
+        if not game.game_started or game.game_over:
+            break
+            
+        curr_sid = game.get_current_player_sid()
+        curr_player = game.players.get(curr_sid)
+        
+        if not curr_player or not curr_player.get('is_bot', False):
+            break # Jika giliran pemain manusia, hentikan loop bot
+            
+        # 1. Bot otomatis cangkul dari deck
+        success, _ = game.draw_from_deck(curr_sid)
+        if success:
+            await broadcast_game_state(room_code)
+            await asyncio.sleep(1.0)
+            
+            # 2. Bot otomatis buang kartu secara acak dari tangannya
+            if curr_player['hand']:
+                card_to_discard = random.choice(curr_player['hand'])
+                _, _, game_ended, details = game.discard_card(curr_sid, card_to_discard['id'], False)
+                
+                await broadcast_game_state(room_code)
+                
+                if details is not None:
+                    summary_data = {
+                        'type': 'round_summary',
+                        'details': details,
+                        'game_ended': game_ended,
+                        'delay': 5
+                    }
+                    for ws in game.active_webs.values():
+                        try:
+                            await ws.send(json.dumps(summary_data))
+                        except:
+                            pass
+                    if game_ended:
+                        game.reset_game_scores()
+                    game.start_new_round()
+                    await broadcast_game_state(room_code)
+        await asyncio.sleep(1.5)
+
 async def broadcast_game_state(room_code):
     if room_code in rooms:
         game = rooms[room_code]
@@ -58,6 +103,12 @@ async def broadcast_game_state(room_code):
                 await ws.send(json.dumps(state))
             except:
                 game.active_webs.pop(sid, None)
+                
+        # Jika giliran saat ini adalah bot, jalankan proses bot secara asynchronous di latar belakang server
+        curr_sid = game.get_current_player_sid()
+        curr_player = game.players.get(curr_sid)
+        if curr_player and curr_player.get('is_bot', False):
+            asyncio.create_task(process_bot_turns(room_code))
 
 async def handler(websocket):
     player_sid = str(id(websocket))
@@ -194,7 +245,6 @@ async def handler(websocket):
                         await websocket.send(json.dumps({"type": "error_msg", "message": msg}))
                     else:
                         await broadcast_game_state(room_code)
-
                         if details is not None:
                             summary_data = {
                                 'type': 'round_summary',
