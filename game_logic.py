@@ -317,12 +317,14 @@ class RemiGameState:
 
         p = self.players[sid]
         
-        # Izinkan pembuangan jika sudah draw ATAU jika ini adalah giliran pertama pemain starter (starter_must_discard)
-        if not self.has_drawn and not self.starter_must_discard and not p.get('is_bot', False):
-            return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
+        # Jika pemain adalah BOT, abaikan syarat ketat has_drawn manual agar bot bisa otomatis jalan
+        if not p.get('is_bot', False):
+            if not self.has_drawn and not self.starter_must_discard:
+                return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
 
         if card_id == "auto_bot" and p.get('is_bot'):
             if len(p['hand']) > 0:
+                # Bot memilih kartu pertama di tangannya untuk dibuang
                 card = p['hand'][0]
             else:
                 return False, "Tangan bot kosong!", False, None
@@ -343,7 +345,7 @@ class RemiGameState:
             details, game_ended = self.calculate_scores()
             return True, "Permainan Selesai (Cangkulan Habis)!", game_ended, details
 
-        # Reset flag starter_must_discard setelah giliran pertama selesai
+        # Reset flag dan lanjutkan ke giliran berikutnya
         self.starter_must_discard = False
         self.next_turn()
         return True, "Kartu dibuang.", False, None
