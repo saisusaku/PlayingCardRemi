@@ -173,12 +173,13 @@ class RemiGameState:
     def start_new_round(self):
         self.deck = create_deck(self.joker_option)
         self.discard_pile = []
-        self.has_drawn = False
 
+        # RESET BERSIH SEMUA TANGAN DAN MELDS PEMAIN
         for sid in self.player_order:
             self.players[sid]['hand'] = []
             self.players[sid]['melds'] = {'series': [], 'patahan': []}
 
+        # Tentukan giliran awal di ronde baru
         if self.first_round or not self.highest_scorer_prev or self.highest_scorer_prev not in self.player_order:
             start_idx = random.randint(0, len(self.player_order) - 1)
         else:
@@ -187,12 +188,14 @@ class RemiGameState:
         self.current_turn_index = start_idx
         starter_sid = self.player_order[start_idx]
 
+        # Bagikan kartu ke masing-masing pemain
         for sid in self.player_order:
             count = 8 if sid == starter_sid else 7
             for _ in range(count):
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
+        # Set status awal ronde: Pemain pertama mendapat 8 kartu dan wajib membuang terlebih dahulu
         self.has_drawn = True
         self.starter_must_discard = True
 
