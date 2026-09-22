@@ -181,13 +181,21 @@ class RemiGameState:
         starter_sid = self.player_order[start_idx]
 
         for sid in self.player_order:
-            count = 8 if sid == starter_sid else 7
+            # Semua pemain awal mendapakan 7 kartu standar terlebih dahulu
+            count = 7
             for _ in range(count):
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
-        # Pemain pertama langsung memegang 8 kartu dan siap membuang/menurunkan kartu tanpa cangkul lagi
-        self.has_drawn = True
+        # KHUSUS PEMAIN PERTAMA (STARTER): Mendapatkan kartu ke-8 sebagai bonus cangkulan pertama
+        # Agar adil dan bot/pemain bisa langsung jalan
+        starter_player = self.players[starter_sid]
+        if self.deck:
+            starter_player['hand'].append(self.deck.pop())
+
+        # Set has_drawn = False agar giliran pertama (baik bot maupun manusia) berjalan normal
+        # di mana mereka bisa langsung menurunkan kombinasi atau langsung membuang kartu ke-8 nya.
+        self.has_drawn = False
         self.starter_must_discard = True
 
     def get_current_player_sid(self):
