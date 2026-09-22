@@ -264,5 +264,19 @@ def broadcast_game_state(room_code):
             }
         emit('game_update', state, to=sid)
 
+@app.after_request
+def add_header(response):
+    # Izinkan iframe dari cPanel
+    response.headers['X-Frame-Options'] = 'ALLOWALL'
+    
+    # Hanya cache file gambar di dalam folder static selama 7 hari
+    if request.path.startswith('/static/images/') and (request.path.endswith('.png') or request.path.endswith('.jpg') or request.path.endswith('.jpeg')):
+        response.headers['Cache-Control'] = 'public, max-age=604800'
+    else:
+        # Untuk CSS, JS, dan file lainnya, pastikan selalu fresh / tidak di-cache lama
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        
+    return response
+
 if __name__ == '__main__':
     socketio.run(app, debug=True, host='0.0.0.0', port=5000)
