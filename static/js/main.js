@@ -1,8 +1,11 @@
 const socket = io("https://playingcardremi.onrender.com/", {
-    transports: ["polling"],
+    transports: ["polling", "websocket"],
     upgrade: true,
+    rememberUpgrade: true,
     reconnection: true,
-    reconnectionAttempts: 5
+    reconnectionAttempts: 10,
+    reconnectionDelay: 500,
+    timeout: 20000
 });
 
 let currentRoom = null;
