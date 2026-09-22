@@ -21,10 +21,6 @@ function createLobby() {
     });
 }
 
-// Preload gambar sprite kartu di awal
-const preloadCardSprite = new Image();
-preloadCardSprite.src = '/static/images/card_sprite.png';
-
 function joinLobby() {
     const name = document.getElementById('player-name').value;
     const room = document.getElementById('room-code-input').value;
@@ -301,13 +297,11 @@ function laySeries() {
     selectedCards = [];
 }
 
-// PERBAIKAN PADA FUNGSI DISCARD
 function discardSelectedCard(isTutupan) {
     if (selectedCards.length === 0) {
         return alert("Pilih 1 kartu untuk dibuang!");
     }
     
-    // Ambil kartu terakhir yang dipilih untuk dibuang
     const cardToDiscard = selectedCards[selectedCards.length - 1];
     
     socket.emit('discard_card', { 
@@ -333,30 +327,12 @@ function sortHand() {
     renderHandUI();
 }
 
-// Koordinat X presisi untuk setiap kolom (0 s/d 13)
 const CARD_X_OFFSETS = [
-    12,   // Kolom 0 (Joker/Back)
-    84,   // Kolom 1 (Angka 2)
-    158,  // Kolom 2 (Angka 3)
-    232,  // Kolom 3 (Angka 4)
-    304,  // Kolom 4 (Angka 5)
-    378,  // Kolom 5 (Angka 6)
-    452,  // Kolom 6 (Angka 7)
-    525,  // Kolom 7 (Angka 8)
-    600,  // Kolom 8 (Angka 9)
-    672,  // Kolom 9 (Angka 10)
-    747,  // Kolom 10 (Jack)
-    819,  // Kolom 11 (Queen)
-    894,  // Kolom 12 (King)
-    968   // Kolom 13 (As)
+    12, 84, 158, 232, 304, 378, 452, 525, 600, 672, 747, 819, 894, 968
 ];
 
-// Koordinat Y presisi untuk setiap suit (Row 0 s/d 3)
 const CARD_Y_OFFSETS = [
-    9,    // Baris 0 (Clubs)
-    109,  // Baris 1 (Spades)
-    209,  // Baris 2 (Hearts)
-    311   // Baris 3 (Diamonds)
+    9, 109, 209, 311
 ];
 
 function renderCardSprite(card) {
@@ -425,7 +401,7 @@ function layPatahan() {
 
 function preloadCardSprite(callback) {
     const img = new Image();
-    img.src = "https://playingcardremi.onrender.com/static/images/card_sprite.png";
+    img.src = "/static/images/card_sprite.png";
     
     let progress = 0;
     const loadingBar = document.getElementById("loading-bar");
