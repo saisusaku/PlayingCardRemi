@@ -1,11 +1,23 @@
 const socket = io("https://playingcardremi.onrender.com/", {
-    transports: ["polling", "websocket"]
+    transports: ["polling", "websocket"],
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    timeout: 30000
 });
+
 let currentRoom = null;
 let selectedCards = [];
 let myHandCards = []; 
 let draggedIndex = null;
 let botTurnTimeout = null;
+
+socket.on("connect", () => {
+    console.log("[SOCKET] Berhasil terhubung ke server dengan ID:", socket.id);
+});
+
+socket.on("connect_error", (err) => {
+    console.error("[SOCKET] Gagal terhubung ke server:", err);
+});
 
 function createLobby() {
     const name = document.getElementById('player-name').value;
@@ -14,6 +26,7 @@ function createLobby() {
     const isSpec = document.getElementById('is-spectator').checked;
     if(!name) return alert("Masukkan Nama!");
     
+    console.log("[LOBBY] Membuat room baru...");
     socket.emit('create_room', { 
         name: name, 
         joker_option: joker, 
@@ -28,10 +41,12 @@ function joinLobby() {
     const isSpec = document.getElementById('is-spectator').checked;
     if(!name || !room) return alert("Isi Nama dan Kode Room!");
 
+    console.log("[LOBBY] Bergabung ke room:", room);
     socket.emit('join_room', { name: name, room_code: room, is_spectator: isSpec });
 }
 
 function startGame() {
+    console.log("[GAME] Memulai game untuk room:", currentRoom);
     socket.emit('start_game', { room_code: currentRoom });
 }
 
@@ -102,26 +117,24 @@ socket.on('game_update', (state) => {
         document.getElementById('turn-indicator').innerText = 
             (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
 
-        // --- KONTROL BOT OTOMATIS SEPENUHNYA DI FRONTEND (AMAN DARI TIMEOUT) ---
+        // --- KONTROL BOT OTOMATIS DI FRONTEND (AMAN & BEBAS TIMEOUT) ---
         if (botTurnTimeout) clearTimeout(botTurnTimeout);
 
         if (!isMyTurn && state.game_started && !state.game_over) {
             botTurnTimeout = setTimeout(() => {
-                // 1. Bot otomatis cangkul dari deck
+                // 1. Bot otomatis cangkul
                 socket.emit('draw_card', { room_code: currentRoom, source: 'deck' });
 
-                // 2. Setelah 1.2 detik, bot otomatis buang kartu pertama di tangannya
+                // 2. Bot otomatis buang kartu setelah jeda singkat
                 setTimeout(() => {
-                    // Cari elemen bot yang sedang jalan lewat state jika diperlukan, 
-                    // tapi perintah ini aman karena server memvalidasi giliran saat ini.
                     socket.emit('discard_card', {
                         room_code: currentRoom,
-                        card_id: "dummy_bot_action", // Server akan ambil kartu pertama dari bot jika card_id diabaikan atau disesuaikan
+                        card_id: "auto_bot", 
                         is_tutupan: false
                     });
-                }, 1200);
+                }, 1000);
 
-            }, 1200);
+            }, 1000);
         }
     }
 });
