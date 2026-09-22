@@ -407,3 +407,49 @@ function layPatahan() {
     socket.emit('lay_patahan', { room_code: currentRoom, card_ids: selectedCards });
     selectedCards = [];
 }
+
+// Fungsi untuk memuat gambar sprite terlebih dahulu
+function preloadCardSprite(callback) {
+    const img = new Image();
+    img.src = "https://playingcardremi.onrender.com/static/images/card_sprite.png";
+    
+    let progress = 0;
+    const loadingBar = document.getElementById("loading-bar");
+    
+    // Simulasi progress bar berjalan mulus
+    const interval = setInterval(() => {
+        if (progress < 90) {
+            progress += 10;
+            if (loadingBar) loadingBar.style.width = progress + "%";
+        }
+    }, 150);
+
+    img.onload = function() {
+        clearInterval(interval);
+        if (loadingBar) loadingBar.style.width = "100%";
+        setTimeout(() => {
+            const loadingScreen = document.getElementById("loading-screen");
+            if (loadingScreen) {
+                loadingScreen.style.opacity = "0";
+                loadingScreen.style.transition = "opacity 0.5s ease";
+                setTimeout(() => loadingScreen.remove(), 500);
+            }
+            if (callback) callback();
+        }, 300);
+    };
+
+    img.onerror = function() {
+        clearInterval(interval);
+        // Jika gagal tetap hilangkan loading agar pemain tidak terjebak
+        const loadingScreen = document.getElementById("loading-screen");
+        if (loadingScreen) loadingScreen.remove();
+        if (callback) callback();
+    };
+}
+
+// Jalankan saat halaman dibuka
+window.addEventListener("DOMContentLoaded", () => {
+    preloadCardSprite(() => {
+        console.log("Aset kartu siap, game dimulai!");
+    });
+});
