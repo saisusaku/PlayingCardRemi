@@ -106,16 +106,26 @@ def is_valid_patahan_set(cards):
 def find_possible_melds_for_bot(hand, has_existing_series=False):
     from itertools import combinations
     
-    # Dioptimalkan dengan membatasi ukuran kombinasi pencarian bot agar tidak memicu memory overload
-    for r in [4, 3]:
+    # Batasi pencarian hanya pada kombinasi 3 kartu saja yang paling sering digunakan
+    # untuk mencegah lonjakan memori (Out of Memory / SIGKILL) di server.
+    for r in [3, 4]:
         if len(hand) >= r:
+            # Batasi iterasi maksimal kombinasi agar tidak membebani RAM
+            count = 0
             for combo in combinations(hand, r):
+                count += 1
+                if count > 50:  # Batasi sampel pencarian maksimal 50 kombinasi pergiliran
+                    break
                 if is_valid_run_series(list(combo)):
                     return 'series', [c['id'] for c in combo]
 
-    for r in [4, 3]:
+    for r in [3, 4]:
         if len(hand) >= r:
+            count = 0
             for combo in combinations(hand, r):
+                count += 1
+                if count > 50:
+                    break
                 combo_list = list(combo)
                 if is_valid_patahan_set(combo_list):
                     is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
