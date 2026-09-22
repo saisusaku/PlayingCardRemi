@@ -1,13 +1,12 @@
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from game_logic import RemiGameState, find_possible_melds_for_bot
+from game_logic import RemiGameState
 import random
-import eventlet
-eventlet.monkey_patch()
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'remi_jauh_secret_key_123!'
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 rooms = {}
 
@@ -81,9 +80,6 @@ def handle_start_game(data):
         game.reset_game_scores()
         game.start_new_round()
         broadcast_game_state(room_code)
-        
-        # Jalankan trigger bot menggunakan eventlet background task agar aman dari timeout
-        socketio.start_background_task(check_and_trigger_bot, room_code)
 
 @socketio.on('draw_card')
 def handle_draw_card(data):
@@ -155,81 +151,63 @@ def handle_discard(data):
                     'delay': 5
                 }, to=room_code)
 
-                socketio.sleep(5)
-                
+                # Reset ronde baru jika permainan selesai
                 if game_ended:
                     game.reset_game_scores()
-                    
                 game.start_new_round()
                 broadcast_game_state(room_code)
 
-            # Pemicu giliran bot di background task eventlet
-            socketio.start_background_task(check_and_trigger_bot, room_code)
-
-
-def check_and_trigger_bot(room_code):
+@socketio.on('trigger_bot_turn')
+def handle_trigger_bot(data):
+    room_code = data.get('room_code')
     if room_code not in rooms:
         return
         
     game = rooms[room_code]
-    
-    if getattr(game, 'is_processing_bots', False):
+    if not game.game_started or game.game_over:
         return
         
-    game.is_processing_bots = True
+    curr_sid = game.get_current_player_sid()
+    curr_player = game.players.get(curr_sid, {})
     
-    try:
-        while game.game_started and not game.game_over:
-            curr_sid = game.get_current_player_sid()
-            curr_player = game.players.get(curr_sid, {})
-            
-            # Jika giliran bukan bot, hentikan perulangan
-            if not curr_player.get('is_bot'):
-                break
+    if not curr_player.get('is_bot'):
+        return
 
-            socketio.sleep(1.0) # Jeda natural agar transisi bot terlihat halus
-
-            # 1. Bot Cangkul
-            if not game.has_drawn:
-                if len(game.deck) > 0:
-                    game.draw_from_deck(curr_sid)
-                    broadcast_game_state(room_code)
-                    socketio.sleep(0.5)
-                else:
-                    details, game_ended = game.calculate_scores()
-                    emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
-                    socketio.sleep(5)
-                    game.start_new_round()
-                    broadcast_game_state(room_code)
-                    continue
-
-            # 2. Bot Buang Kartu Langsung (Bodoh & Aman)
-            bot_p = game.players[curr_sid]
-            details = None
-            if len(bot_p['hand']) > 0:
-                card_to_discard = bot_p['hand'][0]['id']
-                is_tutupan = (len(bot_p['hand']) == 1)
-                
-                success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
-
+    # 1. Bot Cangkul otomatis jika belum mencangkul
+    if not game.has_drawn:
+        if len(game.deck) > 0:
+            game.draw_from_deck(curr_sid)
             broadcast_game_state(room_code)
+            return
+        else:
+            details, game_ended = game.calculate_scores()
+            emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
+            game.start_new_round()
+            broadcast_game_state(room_code)
+            return
 
-            if details is not None:
-                emit('round_summary', {
-                    'details': details,
-                    'game_ended': game_ended,
-                    'delay': 5
-                }, to=room_code)
+    # 2. Bot Buang Kartu otomatis
+    bot_p = game.players[curr_sid]
+    details = None
+    if len(bot_p['hand']) > 0:
+        card_to_discard = bot_p['hand'][0]['id']
+        is_tutupan = (len(bot_p['hand']) == 1)
+        success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
 
-                socketio.sleep(5)
-                
-                if game_ended:
-                    game.reset_game_scores()
-                    
-                game.start_new_round()
-                broadcast_game_state(room_code)
-    finally:
-        game.is_processing_bots = False
+    broadcast_game_state(room_code)
+
+    if details is not None:
+        emit('round_summary', {
+            'details': details,
+            'game_ended': game_ended,
+            'delay': 5
+        }, to=room_code)
+        
+        if game_ended:
+            game.reset_game_scores()
+            
+        game.start_new_round()
+        broadcast_game_state(room_code)
 
 def get_lobby_players(game):
     return [{'sid': p['sid'], 'name': p['name'], 'is_spectator': p['is_spectator'], 'score': p['score']} for p in game.players.values()]
@@ -274,15 +252,11 @@ def broadcast_game_state(room_code):
 @app.after_request
 def add_header(response):
     response.headers['X-Frame-Options'] = 'ALLOWALL'
-    
     if request.path.startswith('/static/images/') and (request.path.endswith('.png') or request.path.endswith('.jpg') or request.path.endswith('.jpeg')):
         response.headers['Cache-Control'] = 'public, max-age=604800'
     else:
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        
     return response
-
-import os
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
