@@ -5,7 +5,6 @@ import random
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'remi_jauh_secret_key_123!'
-# Menggunakan async_mode gevent/eventlet atau threading yang dioptimalkan untuk 1 bot ringan
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 rooms = {}
@@ -19,7 +18,6 @@ def handle_create_room(data):
     name = data.get('name', 'Player')
     is_spectator = data.get('is_spectator', False)
     joker_option = int(data.get('joker_option', 0))
-    # Batasi maksimal 1 bot agar server tetap ringan dan tidak timeout
     bot_count_option = min(1, int(data.get('bot_count_option', 1)))
     room_code = str(random.randint(1000, 9999))
 
@@ -161,7 +159,7 @@ def handle_discard(data):
                 game.start_new_round()
                 broadcast_game_state(room_code)
 
-            # Pemicu giliran bot tunggal jika giliran berpindah ke bot
+            # Pemicu giliran bot jika giliran berpindah ke bot
             check_and_trigger_bot(room_code)
 
 
@@ -177,28 +175,31 @@ def check_and_trigger_bot(room_code):
     game.is_processing_bots = True
     
     try:
-        if game.game_started and not game.game_over:
+        while game.game_started and not game.game_over:
             curr_sid = game.get_current_player_sid()
             curr_player = game.players.get(curr_sid, {})
             
-            # Jika bukan giliran bot, hentikan
+            # Jika giliran bukan bot, hentikan perulangan
             if not curr_player.get('is_bot'):
-                return
+                break
 
-            # 1. Bot Bodoh Cangkul dari Dek
+            socketio.sleep(0.8) # Jeda natural agar transisi bot terlihat halus
+
+            # 1. Bot Cangkul
             if not game.has_drawn:
                 if len(game.deck) > 0:
                     game.draw_from_deck(curr_sid)
                     broadcast_game_state(room_code)
+                    socketio.sleep(0.5)
                 else:
                     details, game_ended = game.calculate_scores()
                     emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
-                    socketio.sleep(2)
+                    socketio.sleep(5)
                     game.start_new_round()
                     broadcast_game_state(room_code)
-                    return
+                    continue
 
-            # 2. Bot Bodoh Langsung Buang Kartu Pertama di Tangan (Tanpa Hitung Kombinasi)
+            # 2. Bot Buang Kartu Langsung (Bodoh & Aman)
             bot_p = game.players[curr_sid]
             details = None
             if len(bot_p['hand']) > 0:
@@ -215,9 +216,12 @@ def check_and_trigger_bot(room_code):
                     'game_ended': game_ended,
                     'delay': 5
                 }, to=room_code)
-                socketio.sleep(2)
+
+                socketio.sleep(5)
+                
                 if game_ended:
                     game.reset_game_scores()
+                    
                 game.start_new_round()
                 broadcast_game_state(room_code)
     finally:
