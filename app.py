@@ -171,22 +171,22 @@ def check_and_trigger_bot(room_code):
         
     game = rooms[room_code]
     
+    # Pastikan hanya satu proses bot berjalan
     if getattr(game, 'is_processing_bots', False):
         return
         
     game.is_processing_bots = True
     
     try:
-        while game.game_started and not game.game_over:
+        if game.game_started and not game.game_over:
             curr_sid = game.get_current_player_sid()
             curr_player = game.players.get(curr_sid, {})
             
+            # Jika giliran bukan bot, hentikan
             if not curr_player.get('is_bot'):
-                break
+                return
 
-            # --- TAHAP 1: BOT "THINKING" SEBELUM CANGKUL ---
-            socketio.sleep(1.2) # Jeda waktu berpikir awal giliran
-            
+            # 1. Bot Cangkul jika belum ambil kartu
             if not game.has_drawn:
                 if len(game.deck) > 0:
                     game.draw_from_deck(curr_sid)
@@ -194,30 +194,24 @@ def check_and_trigger_bot(room_code):
                 else:
                     details, game_ended = game.calculate_scores()
                     emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
-                    socketio.sleep(5)
+                    socketio.sleep(3)
                     game.start_new_round()
                     broadcast_game_state(room_code)
-                    continue
+                    return
 
-            # --- TAHAP 2: BOT "THINKING" UNTUK MENYUSUN/MENURUNKAN KARTU ---
-            socketio.sleep(1.0) # Jeda waktu membaca kemungkinan kombinasi
-            
             bot_p = game.players[curr_sid]
             has_series = len(bot_p['melds']['series']) > 0
             
+            # 2. Bot Cek Kombinasi (Tanpa gelung kombinasi yang berat)
             meld_type, card_ids = find_possible_melds_for_bot(bot_p['hand'], has_existing_series=has_series)
             if meld_type == 'series':
                 game.lay_down_series(curr_sid, card_ids)
                 broadcast_game_state(room_code)
-                socketio.sleep(0.8) # Jeda setelah menurunkan seri
             elif meld_type == 'patahan':
                 game.lay_down_patahan(curr_sid, card_ids)
                 broadcast_game_state(room_code)
-                socketio.sleep(0.8) # Jeda setelah menurunkan patahan
 
-            # --- TAHAP 3: BOT "THINKING" MEMILIH KARTU UNTUK DIBUANG ---
-            socketio.sleep(1.0) # Jeda sebelum memutuskan kartu buangan
-            
+            # 3. Bot Buang Kartu
             details = None
             if len(bot_p['hand']) > 0:
                 non_jokers = [c for c in bot_p['hand'] if c['type'] != 'joker']
@@ -234,12 +228,9 @@ def check_and_trigger_bot(room_code):
                     'game_ended': game_ended,
                     'delay': 5
                 }, to=room_code)
-
-                socketio.sleep(5)
-                
+                socketio.sleep(3)
                 if game_ended:
                     game.reset_game_scores()
-                    
                 game.start_new_round()
                 broadcast_game_state(room_code)
     finally:
