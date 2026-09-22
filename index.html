@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Remi / Jauh Online</title>
-    <!-- Diubah ke URL absolut Render -->
+    <!-- URL absolut CSS ke Render -->
     <link rel="stylesheet" href="https://playingcardremi.onrender.com/static/css/style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
@@ -25,7 +25,7 @@
         <h1>🎴 Remi / Jauh Online</h1>
         <div class="form-group">
             <label>Nama Pemain:</label>
-            <input type="text" id="player-name" placeholder="Masukkan nama..." required>
+            <input type="text" id="player-name" placeholder="Masukkan nama..." autocomplete="off" required>
         </div>
         <div class="form-group">
             <label>Jumlah Bot (isi slot kosong):</label>
@@ -51,7 +51,7 @@
             <button onclick="createLobby()">Buat Lobby</button>
             <button onclick="joinLobby()">Gabung Lobby</button>
         </div>
-        <input type="text" id="room-code-input" placeholder="Kode Room (untuk gabung)">
+        <input type="text" id="room-code-input" placeholder="Kode Room (untuk gabung)" autocomplete="off">
         
         <div id="lobby-room-info" style="display:none; margin-top: 15px;">
             <h3>Kode Room: <span id="display-room-code"></span></h3>
@@ -182,7 +182,7 @@
         });
     </script>
 
-    <!-- Diubah ke URL absolut Render -->
+    <!-- URL absolut JavaScript ke Render -->
     <script src="https://playingcardremi.onrender.com/static/js/main.js"></script>
 </body>
 </html>
