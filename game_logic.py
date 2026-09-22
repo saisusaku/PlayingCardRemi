@@ -104,34 +104,7 @@ def is_valid_patahan_set(cards):
 
 
 def find_possible_melds_for_bot(hand, has_existing_series=False):
-    from itertools import combinations
-    
-    # Batasi pencarian hanya pada kombinasi 3 kartu saja yang paling sering digunakan
-    # untuk mencegah lonjakan memori (Out of Memory / SIGKILL) di server.
-    for r in [3, 4]:
-        if len(hand) >= r:
-            # Batasi iterasi maksimal kombinasi agar tidak membebani RAM
-            count = 0
-            for combo in combinations(hand, r):
-                count += 1
-                if count > 50:  # Batasi sampel pencarian maksimal 50 kombinasi pergiliran
-                    break
-                if is_valid_run_series(list(combo)):
-                    return 'series', [c['id'] for c in combo]
-
-    for r in [3, 4]:
-        if len(hand) >= r:
-            count = 0
-            for combo in combinations(hand, r):
-                count += 1
-                if count > 50:
-                    break
-                combo_list = list(combo)
-                if is_valid_patahan_set(combo_list):
-                    is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
-                    if has_existing_series or is_four_aces:
-                        return 'patahan', [c['id'] for c in combo]
-
+    # Dinonaktifkan total agar tidak memicu memory overload / SIGKILL di Render
     return None, None
 
 
@@ -208,8 +181,6 @@ class RemiGameState:
         # Cek apakah starter adalah bot atau player manusia
         starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
         
-        # Jika starter adalah pemain manusia, dia sudah memegang 8 kartu (dianggap sudah drawn untuk dibuang)
-        # Jika starter adalah bot, biarkan statusnya diproses oleh bot loop
         self.has_drawn = True if not starter_is_bot else False
         self.starter_must_discard = True if not starter_is_bot else False
 
@@ -227,7 +198,6 @@ class RemiGameState:
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
         
-        # Longgarkan validasi has_drawn agar jika tombol tertekan dua kali tidak error/macet
         if len(self.deck) == 0:
             return False, "Cangkulan sudah habis!"
         
@@ -338,7 +308,7 @@ class RemiGameState:
         return True, "Kartu dibuang.", False, None
 
     def process_bot_turn(self, bot_sid):
-        """ EKSEKUSI GILIRAN OTOMATIS BOT """
+        """ EKSEKUSI GILIRAN BOT OTOMATIS (BODOH & AMAN) """
         if self.get_current_player_sid() != bot_sid:
             return False, "Bukan giliran bot"
 
@@ -354,18 +324,9 @@ class RemiGameState:
                 details, game_ended = self.calculate_scores()
                 return True, "Permainan Selesai (Cangkulan Habis)"
 
-        # 2. Coba Turunkan Melds (Seri/Patahan)
-        has_series = len(bot['melds']['series']) > 0
-        meld_type, meld_card_ids = find_possible_melds_for_bot(bot['hand'], has_series)
-        if meld_type == 'series':
-            self.lay_down_series(bot_sid, meld_card_ids)
-        elif meld_type == 'patahan':
-            self.lay_down_patahan(bot_sid, meld_card_ids)
-
-        # 3. Bot Buang Kartu
+        # 2. Bot Langsung Buang Kartu Pertama
         if len(bot['hand']) > 0:
-            non_jokers = [c for c in bot['hand'] if c['type'] != 'joker']
-            discard_card_obj = random.choice(non_jokers) if non_jokers else bot['hand'][0]
+            discard_card_obj = bot['hand'][0]
             is_tutupan = (len(bot['hand']) == 1)
             
             success, msg, game_ended, details = self.discard_card(bot_sid, discard_card_obj['id'], is_tutupan)
