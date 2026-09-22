@@ -9,7 +9,7 @@ rooms = {}
 
 async def process_bot_turns(room_code):
     """Fungsi otomatis untuk menjalankan giliran bot secara berurutan di server"""
-    await asyncio.sleep(1.0) # Beri jeda sejenak
+    await asyncio.sleep(1.5) # Beri jeda sejenak agar pemain sempat melihat meja
     while room_code in rooms:
         game = rooms[room_code]
         if not game.game_started or game.game_over:
@@ -20,36 +20,51 @@ async def process_bot_turns(room_code):
         
         if not curr_player or not curr_player.get('is_bot', False):
             break # Jika giliran pemain manusia, hentikan loop bot
-            
-        # 1. Bot otomatis cangkul dari deck
-        success, _ = game.draw_from_deck(curr_sid)
-        if success:
-            await broadcast_game_state(room_code)
+
+        # JIKA BOT ADALAH STARTER (PEMAIN PERTAMA): 
+        # Dia sudah memegang 8 kartu dari awal dan has_drawn = True, jadi lewati proses cangkul
+        if game.starter_must_discard:
             await asyncio.sleep(1.0)
+        else:
+            # 1. Bot otomatis cangkul dari deck jika bukan giliran pertama
+            success, _ = game.draw_from_deck(curr_sid)
+            if success:
+                await broadcast_game_state(room_code)
+                await asyncio.sleep(1.0)
+            else:
+                # Jika gagal cangkul (misal sudah terlanjur ter-flag draw), paksa lanjut buang
+                pass
+
+        # 2. Bot otomatis buang kartu secara acak dari tangannya
+        if curr_player['hand']:
+            card_to_discard = random.choice(curr_player['hand'])
+            _, _, game_ended, details = game.discard_card(curr_sid, card_to_discard['id'], False)
             
-            # 2. Bot otomatis buang kartu secara acak dari tangannya
-            if curr_player['hand']:
-                card_to_discard = random.choice(curr_player['hand'])
-                _, _, game_ended, details = game.discard_card(curr_sid, card_to_discard['id'], False)
-                
+            await broadcast_game_state(room_code)
+            
+            if details is not None:
+                summary_data = {
+                    'type': 'round_summary',
+                    'details': details,
+                    'game_ended': game_ended,
+                    'delay': 5
+                }
+                for ws in game.active_webs.values():
+                    try:
+                        await ws.send(json.dumps(summary_data))
+                    except:
+                        pass
+                if game_ended:
+                    game.reset_game_scores()
+                game.start_new_round()
                 await broadcast_game_state(room_code)
                 
-                if details is not None:
-                    summary_data = {
-                        'type': 'round_summary',
-                        'details': details,
-                        'game_ended': game_ended,
-                        'delay': 5
-                    }
-                    for ws in game.active_webs.values():
-                        try:
-                            await ws.send(json.dumps(summary_data))
-                        except:
-                            pass
-                    if game_ended:
-                        game.reset_game_scores()
-                    game.start_new_round()
-                    await broadcast_game_state(room_code)
+                # Cek ulang apakah giliran berikutnya langsung bot lagi
+                next_sid = game.get_current_player_sid()
+                if game.players.get(next_sid, {}).get('is_bot', False):
+                    continue
+                else:
+                    break
         await asyncio.sleep(1.5)
 
 async def broadcast_game_state(room_code):
