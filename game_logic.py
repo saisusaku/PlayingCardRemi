@@ -321,6 +321,42 @@ class RemiGameState:
         self.next_turn()
         return True, "Kartu dibuang.", False, None
 
+    def process_bot_turn(self, bot_sid):
+        """ EKSEKUSI GILIRAN OTOMATIS BOT """
+        if self.get_current_player_sid() != bot_sid:
+            return False, "Bukan giliran bot"
+
+        bot = self.players.get(bot_sid)
+        if not bot or not bot.get('is_bot'):
+            return False, "Bukan bot"
+
+        # 1. Bot Cangkul
+        if not self.has_drawn:
+            if len(self.deck) > 0:
+                self.draw_from_deck(bot_sid)
+            else:
+                details, game_ended = self.calculate_scores()
+                return True, "Permainan Selesai (Cangkulan Habis)"
+
+        # 2. Coba Turunkan Melds (Seri/Patahan)
+        has_series = len(bot['melds']['series']) > 0
+        meld_type, meld_card_ids = find_possible_melds_for_bot(bot['hand'], has_series)
+        if meld_type == 'series':
+            self.lay_down_series(bot_sid, meld_card_ids)
+        elif meld_type == 'patahan':
+            self.lay_down_patahan(bot_sid, meld_card_ids)
+
+        # 3. Bot Buang Kartu
+        if len(bot['hand']) > 0:
+            non_jokers = [c for c in bot['hand'] if c['type'] != 'joker']
+            discard_card_obj = random.choice(non_jokers) if non_jokers else bot['hand'][0]
+            is_tutupan = (len(bot['hand']) == 1)
+            
+            success, msg, game_ended, details = self.discard_card(bot_sid, discard_card_obj['id'], is_tutupan)
+            return success, msg
+
+        return False, "Gagal buang kartu bot"
+
     def calculate_scores(self, winner_sid=None, tutupan_card=None):
         score_details = []
         
