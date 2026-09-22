@@ -184,14 +184,13 @@ def check_and_trigger_bot(room_code):
             if not curr_player.get('is_bot'):
                 break
 
-            socketio.sleep(0.5)
+            # --- TAHAP 1: BOT "THINKING" SEBELUM CANGKUL ---
+            socketio.sleep(1.2) # Jeda waktu berpikir awal giliran
             
-            # 1. Bot Cangkul
             if not game.has_drawn:
                 if len(game.deck) > 0:
                     game.draw_from_deck(curr_sid)
                     broadcast_game_state(room_code)
-                    socketio.sleep(0.3)
                 else:
                     details, game_ended = game.calculate_scores()
                     emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
@@ -200,21 +199,25 @@ def check_and_trigger_bot(room_code):
                     broadcast_game_state(room_code)
                     continue
 
+            # --- TAHAP 2: BOT "THINKING" UNTUK MENYUSUN/MENURUNKAN KARTU ---
+            socketio.sleep(1.0) # Jeda waktu membaca kemungkinan kombinasi
+            
             bot_p = game.players[curr_sid]
             has_series = len(bot_p['melds']['series']) > 0
             
-            # 2. Bot Cek Kombinasi
             meld_type, card_ids = find_possible_melds_for_bot(bot_p['hand'], has_existing_series=has_series)
             if meld_type == 'series':
                 game.lay_down_series(curr_sid, card_ids)
                 broadcast_game_state(room_code)
-                socketio.sleep(0.3)
+                socketio.sleep(0.8) # Jeda setelah menurunkan seri
             elif meld_type == 'patahan':
                 game.lay_down_patahan(curr_sid, card_ids)
                 broadcast_game_state(room_code)
-                socketio.sleep(0.3)
+                socketio.sleep(0.8) # Jeda setelah menurunkan patahan
 
-            # 3. Bot Buang Kartu
+            # --- TAHAP 3: BOT "THINKING" MEMILIH KARTU UNTUK DIBUANG ---
+            socketio.sleep(1.0) # Jeda sebelum memutuskan kartu buangan
+            
             details = None
             if len(bot_p['hand']) > 0:
                 non_jokers = [c for c in bot_p['hand'] if c['type'] != 'joker']
