@@ -1,4 +1,4 @@
-const socket = io();
+const socket = io("https://playingcardremi.onrender.com/");
 let currentRoom = null;
 let selectedCards = [];
 let myHandCards = []; 
