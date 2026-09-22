@@ -1,359 +1,442 @@
-import random
+const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+const wsHost = "playingcardremi.onrender.com"; 
+const ws = new WebSocket(`${wsProtocol}${wsHost}`);
 
-SUITS = ['clubs', 'spades', 'hearts', 'diamonds']
-RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+let currentRoom = null;
+let selectedCards = [];
+let myHandCards = []; 
+let draggedIndex = null;
 
-CARD_VALUES = {
-    '2': 5, '3': 5, '4': 5, '5': 5, '6': 5, '7': 5, '8': 5, '9': 5, '10': 5,
-    'J': 10, 'Q': 10, 'K': 10, 'A': 15, 'JOKER': -25
+ws.onopen = () => {
+    console.log("[WS] Terhubung langsung secara kilat ke server!");
+};
+
+ws.onerror = (err) => {
+    console.error("[WS] Koneksi error:", err);
+};
+
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    if (data.type === 'room_created') {
+        currentRoom = data.room_code;
+        document.getElementById('display-room-code').innerText = currentRoom;
+        document.getElementById('lobby-room-info').style.display = 'block';
+        if(data.is_admin) document.getElementById('start-btn').style.display = 'block';
+    } 
+    else if (data.type === 'room_joined') {
+        currentRoom = data.room_code;
+        document.getElementById('display-room-code').innerText = currentRoom;
+        document.getElementById('lobby-room-info').style.display = 'block';
+    } 
+    else if (data.type === 'update_lobby') {
+        const list = document.getElementById('player-list');
+        list.innerHTML = '';
+        data.players.forEach(p => {
+            const li = document.createElement('li');
+            li.innerText = `${p.name} ${p.is_spectator ? '(Penonton)' : ''} - Skor: ${p.score}`;
+            list.appendChild(li);
+        });
+    } 
+    else if (data.type === 'game_update') {
+        handleGameUpdate(data);
+    } 
+    else if (data.type === 'error_msg') {
+        alert(data.message);
+    } 
+    else if (data.type === 'round_summary') {
+        handleRoundSummary(data);
+    }
+};
+
+function createLobby() {
+    const name = document.getElementById('player-name').value;
+    const joker = document.getElementById('joker-option').value;
+    const botCount = document.getElementById('bot-count-option').value;
+    const isSpec = document.getElementById('is-spectator').checked;
+    if(!name) return alert("Masukkan Nama!");
+    
+    ws.send(JSON.stringify({
+        action: 'create_room',
+        name: name,
+        joker_option: joker,
+        bot_count_option: botCount,
+        is_spectator: isSpec
+    }));
 }
 
-NUMERIC_RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10']
-NUMERIC_ORDER = {rank: idx for idx, rank in enumerate(NUMERIC_RANKS)}
+function joinLobby() {
+    const name = document.getElementById('player-name').value;
+    const room = document.getElementById('room-code-input').value;
+    const isSpec = document.getElementById('is-spectator').checked;
+    if(!name || !room) return alert("Isi Nama dan Kode Room!");
 
-FACE_RANKS = ['J', 'Q', 'K']
-FACE_ORDER = {rank: idx for idx, rank in enumerate(FACE_RANKS)}
+    ws.send(JSON.stringify({
+        action: 'join_room',
+        name: name,
+        room_code: room,
+        is_spectator: isSpec
+    }));
+}
 
+function startGame() {
+    ws.send(JSON.stringify({
+        action: 'start_game',
+        room_code: currentRoom
+    }));
+}
 
-def create_deck(joker_count=0):
-    deck = []
-    for suit_idx, suit in enumerate(SUITS):
-        for rank_idx, rank in enumerate(RANKS):
-            deck.append({
-                'id': f"{suit}_{rank}",
-                'suit': suit,
-                'rank': rank,
-                'type': 'normal',
-                'sprite_col': rank_idx + 1,
-                'sprite_row': suit_idx
-            })
+function handleGameUpdate(state) {
+    document.getElementById('lobby-container').style.display = 'none';
+    document.getElementById('game-container').style.display = 'block';
     
-    for i in range(joker_count):
-        deck.append({
-            'id': f"joker_{i+1}",
-            'suit': 'joker',
-            'rank': 'JOKER',
-            'type': 'joker',
-            'sprite_col': 0,
-            'sprite_row': 1 if i % 2 == 0 else 2
-        })
-        
-    random.shuffle(deck)
-    return deck
-
-
-def is_valid_run_series(cards):
-    if len(cards) < 3:
-        return False
+    document.getElementById('deck-count').innerText = `Sisa: ${state.deck_count}`;
     
-    normals = [c for c in cards if c['type'] == 'normal']
-    jokers = [c for c in cards if c['type'] == 'joker']
-    
-    if len(normals) == 0:
-        return False
+    const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
+    if (drawBtn) {
+        if (state.has_drawn || !state.is_my_turn) {
+            drawBtn.disabled = true;
+            drawBtn.style.opacity = '0.5';
+            drawBtn.style.cursor = 'not-allowed';
+        } else {
+            drawBtn.disabled = false;
+            drawBtn.style.opacity = '1';
+            drawBtn.style.cursor = 'pointer';
+        }
+    }
 
-    if any(c['rank'] == 'A' for c in normals):
-        return False
+    const discardDiv = document.getElementById('discard-pile');
+    discardDiv.innerHTML = '';
 
-    same_suit = all(c['suit'] == normals[0]['suit'] for c in normals)
-    if not same_suit:
-        return False
-
-    all_numeric = all(c['rank'] in NUMERIC_RANKS for c in normals)
-    if all_numeric:
-        sorted_cards = sorted(normals, key=lambda c: NUMERIC_ORDER[c['rank']])
-        gaps = 0
-        for i in range(len(sorted_cards) - 1):
-            diff = NUMERIC_ORDER[sorted_cards[i+1]['rank']] - NUMERIC_ORDER[sorted_cards[i]['rank']] - 1
-            if diff < 0:
-                return False
-            gaps += diff
-        return gaps <= len(jokers)
-
-    all_face = all(c['rank'] in FACE_RANKS for c in normals)
-    if all_face:
-        sorted_cards = sorted(normals, key=lambda c: FACE_ORDER[c['rank']])
-        gaps = 0
-        for i in range(len(sorted_cards) - 1):
-            diff = FACE_ORDER[sorted_cards[i+1]['rank']] - FACE_ORDER[sorted_cards[i]['rank']] - 1
-            if diff < 0:
-                return False
-            gaps += diff
-        return gaps <= len(jokers)
-
-    return False
-
-
-def is_valid_patahan_set(cards):
-    if len(cards) < 3:
-        return False
-    
-    normals = [c for c in cards if c['type'] == 'normal']
-    if len(normals) == 0:
-        return False
-
-    same_rank = all(c['rank'] == normals[0]['rank'] for c in normals)
-    if same_rank:
-        suits = [c['suit'] for c in normals]
-        if len(suits) == len(set(suits)):
-            return True
-
-    return False
-
-
-class RemiGameState:
-    def __init__(self, room_id, joker_option=0, target_bot_count=1):
-        self.room_id = room_id
-        self.joker_option = joker_option
-        self.target_bot_count = target_bot_count
-        self.deck = []
-        self.discard_pile = []
-        self.players = {}
-        self.player_order = []
-        self.spectators = []
-        self.current_turn_index = 0
-        self.game_started = False
-        self.game_over = False
-        self.first_round = True
-        self.highest_scorer_prev = None
-        self.has_drawn = False
-        self.starter_must_discard = False
-        self.admin_sid = None
-
-    def add_player(self, sid, name, is_spectator=False):
-        if not self.admin_sid:
-            self.admin_sid = sid
-
-        if is_spectator:
-            self.spectators.append(sid)
-            self.players[sid] = {
-                'sid': sid, 'name': name, 'is_spectator': True,
-                'hand': [], 'melds': {'series': [], 'patahan': []},
-                'score': 0, 'is_bot': False
-            }
-        else:
-            self.player_order.append(sid)
-            self.players[sid] = {
-                'sid': sid, 'name': name, 'is_spectator': False,
-                'hand': [], 'melds': {'series': [], 'patahan': []},
-                'score': 0, 'is_bot': False
-            }
-
-    def reset_game_scores(self):
-        for p in self.players.values():
-            p['score'] = 0
-        self.first_round = True
-        self.highest_scorer_prev = None
-
-    def start_new_round(self):
-        self.deck = create_deck(self.joker_option)
-        self.discard_pile = []
-
-        for sid in self.player_order:
-            self.players[sid]['hand'] = []
-            self.players[sid]['melds'] = {'series': [], 'patahan': []}
-
-        if self.first_round or not self.highest_scorer_prev or self.highest_scorer_prev not in self.player_order:
-            start_idx = random.randint(0, len(self.player_order) - 1)
-        else:
-            start_idx = self.player_order.index(self.highest_scorer_prev)
-
-        self.current_turn_index = start_idx
-        starter_sid = self.player_order[start_idx]
-
-        for sid in self.player_order:
-            count = 8 if sid == starter_sid else 7
-            for _ in range(count):
-                if self.deck:
-                    self.players[sid]['hand'].append(self.deck.pop())
-
-        starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
-        self.has_drawn = True if not starter_is_bot else False
-        self.starter_must_discard = True if not starter_is_bot else False
-
-    def get_current_player_sid(self):
-        if not self.player_order:
-            return None
-        return self.player_order[self.current_turn_index]
-
-    def next_turn(self):
-        self.has_drawn = False
-        self.starter_must_discard = False
-        self.current_turn_index = (self.current_turn_index + 1) % len(self.player_order)
-
-    def draw_from_deck(self, sid):
-        if self.get_current_player_sid() != sid:
-            return False, "Bukan giliran Anda!"
-        
-        p = self.players[sid]
-        if len(p['hand']) >= 8 and not p.get('is_bot'):
-            return False, "Anda sudah memegang 8 kartu di awal ronde, silakan buang kartu!"
-        
-        if len(self.deck) == 0:
-            return False, "Cangkulan sudah habis!"
-        
-        card = self.deck.pop()
-        p['hand'].append(card)
-        self.has_drawn = True
-        return True, "Kartu berhasil dicangkul."
-
-    def draw_from_discard(self, sid, card_id, selected_hand_card_ids=None):
-        if self.get_current_player_sid() != sid:
-            return False, "Bukan giliran Anda!"
-
-        card_indices = [i for i, c in enumerate(self.discard_pile) if c['id'] == card_id]
-        if not card_indices:
-            return False, "Kartu tidak ditemukan di meja!"
-
-        idx = card_indices[0]
-        target_card = self.discard_pile[idx]
-        cards_to_take = self.discard_pile[idx:]
-
-        if len(cards_to_take) > 7:
-            return False, "Hanya bisa mengambil maksimal 7 kartu dari meja!"
-
-        if any(c['type'] == 'joker' for c in cards_to_take):
-            return False, "Kartu Joker di meja tidak boleh diambil!"
-
-        p = self.players[sid]
-        selected_hand_cards = [c for c in p['hand'] if c['id'] in (selected_hand_card_ids or [])]
-        meld_combination = selected_hand_cards + [target_card]
-
-        detected_meld_type = None
-        if is_valid_patahan_set(meld_combination):
-            has_existing_series = len(p['melds']['series']) > 0
-            is_four_aces = (len(meld_combination) == 4 and all(c['rank'] == 'A' for c in meld_combination))
-            if has_existing_series or is_four_aces:
-                detected_meld_type = 'patahan'
-            else:
-                return False, "Untuk Patahan harus sudah ada Seri Murni terlebih dahulu!"
-        elif is_valid_run_series(meld_combination):
-            detected_meld_type = 'series'
-        else:
-            return False, "Kombinasi tidak sah!"
-
-        self.players[sid]['hand'].extend(cards_to_take)
-        self.discard_pile = self.discard_pile[:idx]
-        self.has_drawn = True
-
-        meld_card_ids = [c['id'] for c in meld_combination]
-        self.players[sid]['hand'] = [c for c in self.players[sid]['hand'] if c['id'] not in meld_card_ids]
-        
-        if detected_meld_type == 'series':
-            self.players[sid]['melds']['series'].append(meld_combination)
-        elif detected_meld_type == 'patahan':
-            self.players[sid]['melds']['patahan'].append(meld_combination)
-
-        return True, f"Berhasil mengambil {len(cards_to_take)} kartu dari meja!"
-
-    def lay_down_series(self, sid, card_ids):
-        p = self.players[sid]
-        selected_cards = [c for c in p['hand'] if c['id'] in card_ids]
-
-        if not is_valid_run_series(selected_cards):
-            return False, "Seri tidak sah!"
-
-        p['hand'] = [c for c in p['hand'] if c['id'] not in card_ids]
-        p['melds']['series'].append(selected_cards)
-        return True, "Seri Murni berhasil diturunkan!"
-
-    def lay_down_patahan(self, sid, card_ids):
-        p = self.players[sid]
-        selected_cards = [c for c in p['hand'] if c['id'] in card_ids]
-
-        has_existing_series = len(p['melds']['series']) > 0
-        is_four_aces = (len(selected_cards) == 4 and all(c['rank'] == 'A' for c in selected_cards))
-
-        if not has_existing_series and not is_four_aces:
-            return False, "Anda harus menurunkan Seri Murni terlebih dahulu sebelum Patahan!"
-
-        if not is_valid_patahan_set(selected_cards):
-            return False, "Kombinasi kartu bukan Patahan yang sah!"
-
-        p['hand'] = [c for c in p['hand'] if c['id'] not in card_ids]
-        p['melds']['patahan'].append(selected_cards)
-        return True, "Patahan berhasil diturunkan!"
-
-    def discard_card(self, sid, card_id, is_tutupan=False):
-        if self.get_current_player_sid() != sid:
-            return False, "Bukan giliran Anda!", False, None
-
-        p = self.players[sid]
-        
-        # VALIDASI: Pemain wajib cangkul/mengambil kartu terlebih dahulu pada giliran ini
-        if not self.has_drawn and not p.get('is_bot', False):
-            return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
-        
-        # Jika dipanggil dari bot frontend dengan keyword khusus
-        if card_id == "auto_bot" and p.get('is_bot'):
-            if len(p['hand']) > 0:
-                card = p['hand'][0]
-            else:
-                return False, "Tangan bot kosong!", False, None
-        else:
-            card = next((c for c in p['hand'] if c['id'] == card_id), None)
-            if not card:
-                return False, "Kartu tidak ada di tangan!", False, None
-
-        p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
-
-        if is_tutupan or len(p['hand']) == 0:
-            details, game_ended = self.calculate_scores(winner_sid=sid, tutupan_card=card)
-            return True, "Permainan Selesai (Tutupan)!", game_ended, details
-
-        self.discard_pile.append(card)
-
-        if len(self.deck) == 0:
-            details, game_ended = self.calculate_scores()
-            return True, "Permainan Selesai (Cangkulan Habis)!", game_ended, details
-
-        self.next_turn()
-        return True, "Kartu dibuang.", False, None
-
-    def calculate_scores(self, winner_sid=None, tutupan_card=None):
-        score_details = []
-        
-        for sid in self.player_order:
-            p = self.players[sid]
-            pts_down = 0
-            pts_hand = 0
-            bonus_tutupan = 0
+    if (state.table_cards && state.table_cards.length > 0) {
+        state.table_cards.forEach((card, idx) => {
+            const cardEl = renderCardSprite(card);
+            cardEl.style.zIndex = idx + 1; 
+            if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
             
-            for s in p['melds']['series']:
-                for card in s:
-                    pts_down += CARD_VALUES.get(card['rank'], 5)
-            for pt in p['melds']['patahan']:
-                for card in pt:
-                    pts_down += CARD_VALUES.get(card['rank'], 5)
-            
-            for card in p['hand']:
-                if card['type'] == 'joker':
-                    pts_hand -= 25
-                else:
-                    pts_hand -= CARD_VALUES.get(card['rank'], 5)
+            // FITUR UTAMA: Mengaktifkan klik pada kartu di meja (baik atas maupun bawah)
+            cardEl.onclick = () => {
+                if (idx === state.table_cards.length - 1) {
+                    // Jika klik kartu paling atas di meja
+                    drawCard('discard', card.id);
+                } else {
+                    // Jika mengambil kartu di bawah, ingatkan pemain untuk memilih kartu pasangan di tangan terlebih dahulu
+                    drawCard('discard', card.id);
+                }
+            };
 
-            if winner_sid and sid == winner_sid and tutupan_card:
-                val = CARD_VALUES.get(tutupan_card['rank'], 5)
-                if tutupan_card['type'] == 'joker':
-                    val = 25
-                bonus_tutupan = val * 10
+            discardDiv.appendChild(cardEl);
+        });
+        discardDiv.scrollLeft = discardDiv.scrollWidth;
+    }
 
-            round_total = pts_down + pts_hand + bonus_tutupan
-            p['score'] += round_total
-            
-            score_details.append({
-                'name': p['name'],
-                'pts_down': pts_down,
-                'pts_hand': pts_hand,
-                'bonus_tutupan': bonus_tutupan,
-                'round_total': round_total,
-                'accumulated_score': p['score'],
-                'is_winner': (sid == winner_sid)
-            })
+    renderOpponentsPositions(state.opponents || state.players || []);
 
-        highest_player = max(self.players.values(), key=lambda x: x['score'])
-        self.highest_scorer_prev = highest_player['sid']
-        self.first_round = False
+    if (state.hand !== undefined) {
+        syncAndRenderHand(state.hand);
+        renderMyMelds(state.my_melds || []);
+
+        const isMyTurn = state.is_my_turn;
+        const myScore = state.my_score !== undefined ? state.my_score : 0;
         
-        game_ended = any(p['score'] >= 500 for p in self.players.values() if not p['is_spectator'])
-        return score_details, game_ended
+        document.getElementById('turn-indicator').innerText = 
+            (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
+    }
+}
+
+function renderOpponentsPositions(opponents) {
+    const topSlot = document.getElementById('opponent-top');
+    const leftSlot = document.getElementById('opponent-left');
+    const rightSlot = document.getElementById('opponent-right');
+
+    if (!topSlot || !leftSlot || !rightSlot) return;
+
+    topSlot.innerHTML = '';
+    leftSlot.innerHTML = '';
+    rightSlot.innerHTML = '';
+
+    const slots = [topSlot, leftSlot, rightSlot];
+
+    opponents.forEach((op, index) => {
+        if (index < slots.length) {
+            const opCard = createOpponentCardElement(op);
+            slots[index].appendChild(opCard);
+        }
+    });
+}
+
+function createOpponentCardElement(op) {
+    const opDiv = document.createElement('div');
+    opDiv.className = 'opponent-card';
+    opDiv.innerHTML = `<strong>${op.name}</strong><br><small>Tangan: ${op.hand_count || 0} | Skor: ${op.score}</small>`;
+
+    const meldsDiv = document.createElement('div');
+    meldsDiv.className = 'melds-row';
+    meldsDiv.style.marginTop = '4px';
+
+    if (op.melds && op.melds.series) {
+        op.melds.series.forEach(series => {
+            const group = document.createElement('div');
+            group.className = 'card-stack-horizontal';
+            group.style.height = '60px';
+            series.forEach((card, idx) => {
+                const cEl = renderCardSprite(card);
+                cEl.style.transform = 'scale(0.65)';
+                cEl.style.margin = '-20px -25px';
+                cEl.style.zIndex = idx;
+                group.appendChild(cEl);
+            });
+            meldsDiv.appendChild(group);
+        });
+    }
+
+    opDiv.appendChild(meldsDiv);
+    return opDiv;
+}
+
+function renderMyMelds(myMelds) {
+    const meldsDiv = document.getElementById('my-melds');
+    if(!meldsDiv) return;
+    meldsDiv.innerHTML = '';
+
+    if(myMelds) {
+        if(myMelds.series) {
+            myMelds.series.forEach(series => {
+                const group = document.createElement('div');
+                group.className = 'card-stack-horizontal';
+                series.forEach((card, idx) => {
+                    const cEl = renderCardSprite(card);
+                    cEl.style.zIndex = idx;
+                    group.appendChild(cEl);
+                });
+                meldsDiv.appendChild(group);
+            });
+        }
+        if(myMelds.patahan) {
+            myMelds.patahan.forEach(patahan => {
+                const group = document.createElement('div');
+                group.className = 'card-stack-horizontal';
+                patahan.forEach((card, idx) => {
+                    const cEl = renderCardSprite(card);
+                    cEl.style.zIndex = idx;
+                    group.appendChild(cEl);
+                });
+                meldsDiv.appendChild(group);
+            });
+        }
+    }
+}
+
+function syncAndRenderHand(serverHand) {
+    const serverCardIds = serverHand.map(c => c.id);
+    myHandCards = myHandCards.filter(c => serverCardIds.includes(c.id));
+
+    serverHand.forEach(serverCard => {
+        const exists = myHandCards.some(c => c.id === serverCard.id);
+        if (!exists) {
+            myHandCards.push(serverCard);
+        }
+    });
+
+    selectedCards = selectedCards.filter(id => serverCardIds.includes(id));
+    renderHandUI();
+}
+
+function renderHandUI() {
+    const handDiv = document.getElementById('my-hand');
+    handDiv.innerHTML = '';
+
+    myHandCards.forEach((card, index) => {
+        const cardEl = renderCardSprite(card);
+        cardEl.setAttribute('draggable', 'true');
+        cardEl.dataset.index = index;
+
+        if (selectedCards.includes(card.id)) {
+            cardEl.classList.add('selected');
+        }
+
+        cardEl.onclick = () => toggleSelectCard(card.id, cardEl);
+
+        cardEl.addEventListener('dragstart', handleDragStart);
+        cardEl.addEventListener('dragover', handleDragOver);
+        cardEl.addEventListener('drop', handleDrop);
+        cardEl.addEventListener('dragend', handleDragEnd);
+
+        handDiv.appendChild(cardEl);
+    });
+}
+
+function handleDragStart(e) {
+    draggedIndex = parseInt(this.dataset.index);
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    const targetIndex = parseInt(this.dataset.index);
+    if (draggedIndex !== null && draggedIndex !== targetIndex) {
+        const movedCard = myHandCards.splice(draggedIndex, 1)[0];
+        myHandCards.splice(targetIndex, 0, movedCard);
+        renderHandUI();
+    }
+}
+
+function handleDragEnd() {
+    this.classList.remove('dragging');
+    draggedIndex = null;
+}
+
+function toggleSelectCard(cardId, element) {
+    const idx = selectedCards.indexOf(cardId);
+    if(idx > -1) {
+        selectedCards.splice(idx, 1);
+        element.classList.remove('selected');
+    } else {
+        selectedCards.push(cardId);
+        element.classList.add('selected');
+    }
+}
+
+function drawCard(source, cardId=null) {
+    if (source === 'deck') {
+        ws.send(JSON.stringify({
+            action: 'draw_card',
+            room_code: currentRoom,
+            source: 'deck'
+        }));
+    } else if (source === 'discard') {
+        // Jika ingin mengambil kartu di bawah, pastikan memilih kartu pasangan di tangan terlebih dahulu jika diperlukan
+        ws.send(JSON.stringify({
+            action: 'draw_card',
+            room_code: currentRoom,
+            source: 'discard',
+            card_id: cardId,
+            selected_hand_card_ids: selectedCards
+        }));
+        
+        selectedCards = [];
+    }
+}
+
+function laySeries() {
+    if(selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Seri!");
+    ws.send(JSON.stringify({
+        action: 'lay_series',
+        room_code: currentRoom,
+        card_ids: selectedCards
+    }));
+    selectedCards = [];
+}
+
+function layPatahan() {
+    if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
+    ws.send(JSON.stringify({
+        action: 'lay_patahan',
+        room_code: currentRoom,
+        card_ids: selectedCards
+    }));
+    selectedCards = [];
+}
+
+function discardSelectedCard(isTutupan) {
+    if (selectedCards.length === 0) {
+        return alert("Pilih 1 kartu untuk dibuang!");
+    }
+    
+    const cardToDiscard = selectedCards[selectedCards.length - 1];
+    
+    ws.send(JSON.stringify({
+        action: 'discard_card',
+        room_code: currentRoom,
+        card_id: cardToDiscard,
+        is_tutupan: isTutupan
+    }));
+    
+    selectedCards = [];
+}
+
+function sortHand() {
+    const rankOrder = {'2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13, 'A':14, 'JOKER':99};
+    const suitOrder = {'clubs':1, 'spades':2, 'hearts':3, 'diamonds':4, 'joker':5};
+
+    myHandCards.sort((a, b) => {
+        if (suitOrder[a.suit] !== suitOrder[b.suit]) {
+            return suitOrder[a.suit] - suitOrder[b.suit];
+        }
+        return rankOrder[a.rank] - rankOrder[b.rank];
+    });
+
+    renderHandUI();
+}
+
+const CARD_X_OFFSETS = [
+    12, 84, 158, 232, 304, 378, 452, 525, 600, 672, 747, 819, 894, 968
+];
+
+const CARD_Y_OFFSETS = [
+    9, 109, 209, 311
+];
+
+function renderCardSprite(card) {
+    const div = document.createElement('div');
+    div.className = 'card-sprite';
+    
+    const posX = -CARD_X_OFFSETS[card.sprite_col]; 
+    const posY = -CARD_Y_OFFSETS[card.sprite_row];
+    
+    div.style.backgroundPosition = `${posX}px ${posY}px`;
+    return div;
+}
+
+function handleRoundSummary(data) {
+    const modal = document.getElementById('score-modal');
+    const tbody = document.getElementById('modal-score-body');
+    const title = document.getElementById('modal-title');
+    const timerSpan = document.getElementById('countdown-timer');
+
+    tbody.innerHTML = '';
+    
+    if(data.game_ended) {
+        title.innerText = "🏆 PERMAINAN SELESAI (MEMENANGKAN 500 PTS)!";
+    } else {
+        title.innerText = "📋 HASIL RONDE & PERHITUNGAN SKOR";
+    }
+
+    data.details.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid #333';
+        if(d.is_winner) tr.style.background = 'rgba(39, 174, 96, 0.2)';
+
+        tr.innerHTML = `
+            <td style="padding:8px; text-align:left;"><strong>${d.name}</strong> ${d.is_winner ? '👑' : ''}</td>
+            <td style="padding:8px; color:#2ecc71;">+${d.pts_down}</td>
+            <td style="padding:8px; color:#e74c3c;">${d.pts_hand}</td>
+            <td style="padding:8px; color:#f1c40f;">+${d.bonus_tutupan}</td>
+            <td style="padding:8px;">${d.round_total}</td>
+            <td style="padding:8px; font-weight:bold; color:#2ecc71;">${d.accumulated_score}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    modal.style.display = 'flex';
+
+    let timeLeft = data.delay || 5;
+    timerSpan.innerText = timeLeft;
+    
+    const interval = setInterval(() => {
+        timeLeft -= 1;
+        if(timeLeft >= 0) {
+            timerSpan.innerText = timeLeft;
+        }
+        if (timeLeft <= 0) {
+            clearInterval(interval);
+            modal.style.display = 'none';
+        }
+    }, 1000);
+}
