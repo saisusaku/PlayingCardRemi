@@ -1,14 +1,19 @@
-body {
+/* PENGATURAN DASAR LAYAR PENUH */
+html, body {
     font-family: 'Segoe UI', Arial, sans-serif;
     background-color: #0d1117;
     color: #ffffff;
     margin: 0;
-    padding: 10px;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    box-sizing: border-box;
 }
 
 .panel {
     max-width: 420px;
-    margin: 30px auto;
+    margin: 50px auto;
     background: #1e1e1e;
     padding: 20px;
     border-radius: 10px;
@@ -43,13 +48,26 @@ button:hover { background: #219150; }
 .btn-win { background: #e74c3c; }
 .btn-win:hover { background: #c0392b; }
 
-/* LAYOUT MEJA KARTU HITAM/HIJAU PROFESIONAL */
+/* KONTAINER UTAMA MEJA KARTU (FULL DISPLAY) */
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #0d1117;
+    padding: 5px;
+}
+
 .poker-table {
     background: radial-gradient(circle, #1a5e38 0%, #0d3820 100%);
-    border: 12px solid #3d2314;
-    border-radius: 35px;
-    height: 720px;
-    padding: 15px;
+    border: 8px solid #3d2314;
+    border-radius: 20px;
+    width: 100%;
+    height: 100%;
+    max-width: 1280px;
+    max-height: 760px;
+    padding: 10px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -60,7 +78,7 @@ button:hover { background: #219150; }
 
 /* KELOMPOK POSISI LAWAN */
 .opponent-slot {
-    min-height: 85px;
+    min-height: 65px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -68,35 +86,36 @@ button:hover { background: #219150; }
 
 .top-slot {
     width: 100%;
-    height: 90px;
+    height: 70px;
 }
 
 .middle-layout {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    height: 180px;
+    flex: 1;
     width: 100%;
 }
 
 .side-slot {
-    width: 180px;
+    width: 160px;
     height: 100%;
 }
 
 .opponent-card {
     background: rgba(0, 0, 0, 0.45);
     border: 1px solid rgba(255, 255, 255, 0.15);
-    padding: 6px 12px;
-    border-radius: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
     text-align: center;
-    max-width: 170px;
+    max-width: 150px;
     box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    font-size: 11px;
 }
 
 .opponent-card strong {
     color: #f1c40f;
-    font-size: 13px;
+    font-size: 12px;
 }
 
 /* MEJA TENGAH */
@@ -104,21 +123,21 @@ button:hover { background: #219150; }
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 20px;
+    gap: 15px;
     flex: 1;
 }
 
 .discard-area {
     text-align: center;
-    width: 480px;
+    width: 420px;
 }
 
 .discard-title, .melds-title {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: bold;
     letter-spacing: 1px;
     color: #a0aec0;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     text-shadow: 0 1px 2px rgba(0,0,0,0.8);
 }
 
@@ -127,8 +146,8 @@ button:hover { background: #219150; }
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 5px 10px;
-    height: 105px;
+    padding: 5px;
+    height: 95px;
     width: 100%;
     box-sizing: border-box;
     overflow-x: auto;
@@ -136,7 +155,7 @@ button:hover { background: #219150; }
 }
 
 .card-stack-horizontal .card-sprite {
-    margin-left: -52px;
+    margin-left: -48px;
     flex-shrink: 0;
     position: relative;
     transition: margin 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
@@ -147,10 +166,10 @@ button:hover { background: #219150; }
 }
 
 .card-stack-horizontal .card-sprite:hover {
-    margin-left: -20px;
-    margin-right: 20px;
+    margin-left: -15px;
+    margin-right: 15px;
     z-index: 999 !important;
-    transform: translateY(-8px);
+    transform: translateY(-6px);
 }
 
 .card-stack-horizontal .card-sprite.top-card {
@@ -165,20 +184,24 @@ button:hover { background: #219150; }
     align-items: center;
 }
 
+.player-header h3 {
+    font-size: 13px;
+    margin: 2px 0;
+}
+
 .melds-container {
     background: rgba(0, 0, 0, 0.35);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 6px 12px;
-    min-height: 105px;
-    width: 90%;
+    border-radius: 6px;
+    padding: 4px 8px;
+    min-height: 85px;
+    width: 95%;
     box-sizing: border-box;
-    margin-bottom: 5px;
 }
 
 .melds-row {
     display: flex;
-    gap: 15px;
+    gap: 10px;
     overflow-x: auto;
     justify-content: center;
 }
@@ -186,31 +209,17 @@ button:hover { background: #219150; }
 .card-row {
     display: flex;
     justify-content: center;
-    gap: 6px;
-    padding: 5px;
-    min-height: 105px;
+    gap: 4px;
+    padding: 2px;
+    min-height: 95px;
 }
 
-/* ANIMASI KARTU */
-@keyframes drawCardAnim {
-    0% { transform: translateY(-80px) scale(0.6); opacity: 0; }
-    100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-
-@keyframes discardCardAnim {
-    0% { transform: translateY(80px) scale(0.6); opacity: 0; }
-    100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-
-.card-sprite.anim-draw { animation: drawCardAnim 0.25s ease-out; }
-.card-sprite.anim-discard { animation: discardCardAnim 0.25s ease-out; }
-
-/* SPRITE KARTU UTAMA (Path diperbaiki relatif terhadap folder static/css/) */
+/* SPRITE KARTU UTAMA */
 .card-sprite {
-    width: 68px;
-    height: 87px;
+    width: 60px;
+    height: 78px;
     background-image: url('../images/card_sprite.png');
-    background-size: 1045px 408px;
+    background-size: 922px 360px;
     border-radius: 4px;
     cursor: grab;
     user-select: none;
@@ -220,22 +229,22 @@ button:hover { background: #219150; }
 }
 
 .card-sprite.selected {
-    transform: translateY(-22px) !important;
-    box-shadow: 0 0 16px #f1c40f, 0 8px 12px rgba(0,0,0,0.6) !important;
+    transform: translateY(-18px) !important;
+    box-shadow: 0 0 14px #f1c40f, 0 6px 10px rgba(0,0,0,0.6) !important;
     border: 2px solid #f1c40f !important;
     z-index: 100 !important;
 }
 
 .card-sprite:active { cursor: grabbing; }
-.card-sprite:hover { transform: translateY(-10px); }
+.card-sprite:hover { transform: translateY(-8px); }
 .card-sprite.dragging { opacity: 0.4; transform: scale(0.95); }
 
 .card-back {
-    width: 71px;
-    height: 96px;
+    width: 60px;
+    height: 78px;
     background-color: #1a252f;
     border: 2px solid #ffffff;
-    border-radius: 5px;
+    border-radius: 4px;
     cursor: pointer;
     box-shadow: 0 3px 8px rgba(0,0,0,0.5);
 }
@@ -244,12 +253,40 @@ button:hover { background: #219150; }
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
+    font-size: 11px;
 }
 
 .action-buttons {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     justify-content: center;
-    margin-top: 5px;
+    margin-top: 3px;
+}
+
+.action-buttons button {
+    padding: 6px 10px;
+    font-size: 11px;
+}
+
+/* RESPONSIF KHUSUS PERANGKAT MOBILE / LAYAR KECIL */
+@media screen and (max-width: 768px) {
+    .poker-table {
+        border-width: 4px;
+        border-radius: 10px;
+        padding: 4px;
+    }
+    .card-sprite {
+        width: 50px;
+        height: 65px;
+        background-size: 768px 300px;
+    }
+    .card-back {
+        width: 50px;
+        height: 65px;
+    }
+    .action-buttons button {
+        padding: 4px 6px;
+        font-size: 10px;
+    }
 }
