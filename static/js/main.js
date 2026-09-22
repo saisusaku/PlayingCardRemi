@@ -113,6 +113,18 @@ function handleGameUpdate(state) {
             const cardEl = renderCardSprite(card);
             cardEl.style.zIndex = idx + 1; 
             if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
+            
+            // FITUR UTAMA: Mengaktifkan klik pada kartu di meja (baik atas maupun bawah)
+            cardEl.onclick = () => {
+                if (idx === state.table_cards.length - 1) {
+                    // Jika klik kartu paling atas di meja
+                    drawCard('discard', card.id);
+                } else {
+                    // Jika mengambil kartu di bawah, ingatkan pemain untuk memilih kartu pasangan di tangan terlebih dahulu
+                    drawCard('discard', card.id);
+                }
+            };
+
             discardDiv.appendChild(cardEl);
         });
         discardDiv.scrollLeft = discardDiv.scrollWidth;
@@ -299,10 +311,7 @@ function drawCard(source, cardId=null) {
             source: 'deck'
         }));
     } else if (source === 'discard') {
-        if (selectedCards.length === 0) {
-            return alert("Pilih minimal 2 kartu pasangan di tangan Anda terlebih dahulu!");
-        }
-
+        // Jika ingin mengambil kartu di bawah, pastikan memilih kartu pasangan di tangan terlebih dahulu jika diperlukan
         ws.send(JSON.stringify({
             action: 'draw_card',
             room_code: currentRoom,
