@@ -104,14 +104,14 @@ socket.on('game_update', (state) => {
         const myScore = state.my_score !== undefined ? state.my_score : 0;
         
         document.getElementById('turn-indicator').innerText = 
-            (isMyTurn ? "Giliran Anda!" : "Menunggu Lawan...") + ` | Skor Anda: ${myScore}`;
+            (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
 
-        // --- TRIGGER BOT DARI SISI CLIENT (FRONTEND) ---
-        // Jika bukan giliran saya, berikan jeda singkat lalu minta server jalankan bot
+        // --- PEMICU OTOMATIS GILIRAN BOT DARI CLIENT ---
+        // Jika bukan giliran saya, beri jeda 1 detik lalu suruh server jalankan bot
         if (!isMyTurn && state.game_started && !state.game_over) {
             setTimeout(() => {
                 socket.emit('trigger_bot_turn', { room_code: currentRoom });
-            }, 1000); // Jeda 1 detik agar pergerakan bot terlihat natural dan tidak membebani server
+            }, 1000); 
         }
     }
 });
