@@ -101,8 +101,27 @@ def is_valid_patahan_set(cards):
     return False
 
 
+def find_possible_melds_for_bot(hand, has_existing_series=False):
+    from itertools import combinations
+    
+    for r in range(len(hand), 2, -1):
+        for combo in combinations(hand, r):
+            if is_valid_run_series(list(combo)):
+                return 'series', [c['id'] for c in combo]
+
+    for r in range(len(hand), 2, -1):
+        for combo in combinations(hand, r):
+            combo_list = list(combo)
+            if is_valid_patahan_set(combo_list):
+                is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
+                if has_existing_series or is_four_aces:
+                    return 'patahan', [c['id'] for c in combo]
+
+    return None, None
+
+
 class RemiGameState:
-    def __init__(self, room_id, joker_option=0, target_bot_count=1):
+    def __init__(self, room_id, joker_option=0, target_bot_count=3):
         self.room_id = room_id
         self.joker_option = joker_option
         self.target_bot_count = target_bot_count
@@ -167,10 +186,9 @@ class RemiGameState:
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
-        starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
-        # Jika pemain pertama manusia, dia sudah memegang 8 kartu dan tidak perlu cangkul lagi di awal
-        self.has_drawn = True if not starter_is_bot else False
-        self.starter_must_discard = True if not starter_is_bot else False
+        # Pemain pertama mendapat 8 kad dan tidak perlu cangkul di awal (has_drawn = True)
+        self.has_drawn = True
+        self.starter_must_discard = True
 
     def get_current_player_sid(self):
         if not self.player_order:
@@ -185,41 +203,35 @@ class RemiGameState:
     def draw_from_deck(self, sid):
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
-        
-        # ATURAN: Cek apakah pemain sudah mencangkul atau mengambil kartu pada giliran ini
         if self.has_drawn:
-            return False, "Anda sudah mencangkul atau mengambil kartu pada giliran ini! Silakan buang kartu."
-        
+            return False, "Anda sudah mengambil kad pada giliran ini!"
         if len(self.deck) == 0:
             return False, "Cangkulan sudah habis!"
         
-        p = self.players[sid]
         card = self.deck.pop()
-        p['hand'].append(card)
-        self.has_drawn = True  # Kunci cangkul agar tidak bisa mencangkul lagi sebelum buang kartu
-        return True, "Kartu berhasil dicangkul."
+        self.players[sid]['hand'].append(card)
+        self.has_drawn = True
+        return True, "Kad berjaya dicangkul."
 
     def draw_from_discard(self, sid, card_id, selected_hand_card_ids=None):
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
-
-        # ATURAN: Cek apakah pemain sudah mengambil kartu pada giliran ini
         if self.has_drawn:
-            return False, "Anda sudah mengambil kartu pada giliran ini! Silakan buang kartu."
+            return False, "Anda sudah mengambil kad pada giliran ini!"
 
         card_indices = [i for i, c in enumerate(self.discard_pile) if c['id'] == card_id]
         if not card_indices:
-            return False, "Kartu tidak ditemukan di meja!"
+            return False, "Kad tidak ditemui di meja!"
 
         idx = card_indices[0]
         target_card = self.discard_pile[idx]
         cards_to_take = self.discard_pile[idx:]
 
         if len(cards_to_take) > 7:
-            return False, "Hanya bisa mengambil maksimal 7 kartu dari meja!"
+            return False, "Hanya boleh mengambil maksimum 7 kad dari meja!"
 
         if any(c['type'] == 'joker' for c in cards_to_take):
-            return False, "Kartu Joker di meja tidak boleh diambil!"
+            return False, "Kad Joker di meja tidak boleh diambil!"
 
         p = self.players[sid]
         selected_hand_cards = [c for c in p['hand'] if c['id'] in (selected_hand_card_ids or [])]
@@ -232,7 +244,7 @@ class RemiGameState:
             if has_existing_series or is_four_aces:
                 detected_meld_type = 'patahan'
             else:
-                return False, "Untuk Patahan harus sudah ada Seri Murni terlebih dahulu!"
+                return False, "Untuk Patahan perlu ada Seri Murni terlebih dahulu!"
         elif is_valid_run_series(meld_combination):
             detected_meld_type = 'series'
         else:
@@ -240,7 +252,7 @@ class RemiGameState:
 
         self.players[sid]['hand'].extend(cards_to_take)
         self.discard_pile = self.discard_pile[:idx]
-        self.has_drawn = True  # Kunci agar tidak bisa mengambil/mencangkul lagi di giliran ini
+        self.has_drawn = True
 
         meld_card_ids = [c['id'] for c in meld_combination]
         self.players[sid]['hand'] = [c for c in self.players[sid]['hand'] if c['id'] not in meld_card_ids]
@@ -250,7 +262,7 @@ class RemiGameState:
         elif detected_meld_type == 'patahan':
             self.players[sid]['melds']['patahan'].append(meld_combination)
 
-        return True, f"Berhasil mengambil {len(cards_to_take)} kartu dari meja!"
+        return True, f"Berjaya mengambil {len(cards_to_take)} kad dari meja!"
 
     def lay_down_series(self, sid, card_ids):
         p = self.players[sid]
@@ -261,7 +273,7 @@ class RemiGameState:
 
         p['hand'] = [c for c in p['hand'] if c['id'] not in card_ids]
         p['melds']['series'].append(selected_cards)
-        return True, "Seri Murni berhasil diturunkan!"
+        return True, "Seri Murni berjaya diturunkan!"
 
     def lay_down_patahan(self, sid, card_ids):
         p = self.players[sid]
@@ -271,14 +283,14 @@ class RemiGameState:
         is_four_aces = (len(selected_cards) == 4 and all(c['rank'] == 'A' for c in selected_cards))
 
         if not has_existing_series and not is_four_aces:
-            return False, "Anda harus menurunkan Seri Murni terlebih dahulu sebelum Patahan!"
+            return False, "Anda perlu menurunkan Seri Murni terlebih dahulu sebelum Patahan!"
 
         if not is_valid_patahan_set(selected_cards):
-            return False, "Kombinasi kartu bukan Patahan yang sah!"
+            return False, "Kombinasi kad bukan Patahan yang sah!"
 
         p['hand'] = [c for c in p['hand'] if c['id'] not in card_ids]
         p['melds']['patahan'].append(selected_cards)
-        return True, "Patahan berhasil diturunkan!"
+        return True, "Patahan berjaya diturunkan!"
 
     def discard_card(self, sid, card_id, is_tutupan=False):
         if self.get_current_player_sid() != sid:
@@ -286,10 +298,9 @@ class RemiGameState:
 
         p = self.players[sid]
         
-        # VALIDASI: Pemain wajib cangkul/mengambil kartu terlebih dahulu pada giliran ini sebelum boleh buang
         if not self.has_drawn and not p.get('is_bot', False):
-            return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
-        
+            return False, "Anda mesti cangkul atau ambil kad terlebih dahulu sebelum membuang!", False, None
+
         if card_id == "auto_bot" and p.get('is_bot'):
             if len(p['hand']) > 0:
                 card = p['hand'][0]
@@ -298,7 +309,7 @@ class RemiGameState:
         else:
             card = next((c for c in p['hand'] if c['id'] == card_id), None)
             if not card:
-                return False, "Kartu tidak ada di tangan!", False, None
+                return False, "Kad tidak ada di tangan!", False, None
 
         p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
 
@@ -313,7 +324,7 @@ class RemiGameState:
             return True, "Permainan Selesai (Cangkulan Habis)!", game_ended, details
 
         self.next_turn()
-        return True, "Kartu dibuang.", False, None
+        return True, "Kad dibuang.", False, None
 
     def calculate_scores(self, winner_sid=None, tutupan_card=None):
         score_details = []
