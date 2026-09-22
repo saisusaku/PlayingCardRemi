@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Remi / Jauh Online</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Diubah ke URL absolut Render -->
+    <link rel="stylesheet" href="https://playingcardremi.onrender.com/static/css/style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
@@ -90,13 +91,13 @@
                 <div class="action-buttons">
                     <button onclick="drawCard('deck')">Cangkul 1 Kartu</button>
                     <button onclick="laySeries()">Turunkan Seri</button>
-                    <button onclick="layPatahan()">Turunkan Patahan</button> <!-- TAMBAHKAN TOMBOL INI -->
+                    <button onclick="layPatahan()">Turunkan Patahan</button>
                     <button onclick="sortHand()">⚡ Susun Kartu (Auto)</button>
                     <button onclick="discardSelectedCard(false)">Buang Kartu</button>
                     <button onclick="discardSelectedCard(true)" class="btn-win">Tutup (Menang)</button>
                 </div>
 
-                <!-- SERI & PATAHAN DIPINDAHKAN KE BAWAH DIBAWAH MENU -->
+                <!-- SERI & PATAHAN -->
                 <div class="melds-container" style="margin-top: 10px;">
                     <div class="melds-title">SERI & PATAHAN ANDA</div>
                     <div id="my-melds" class="melds-row"></div>
@@ -131,6 +132,7 @@
         </div>
     </div>
 
-    <script src="/static/js/main.js"></script>
+    <!-- Diubah ke URL absolut Render -->
+    <script src="https://playingcardremi.onrender.com/static/js/main.js"></script>
 </body>
 </html>
