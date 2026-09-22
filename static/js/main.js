@@ -1,8 +1,8 @@
 const socket = io("https://playingcardremi.onrender.com/", {
-    transports: ["polling", "websocket"],
-    reconnectionAttempts: 10,
-    reconnectionDelay: 1000,
-    timeout: 30000
+    transports: ["polling"],
+    upgrade: true,
+    reconnection: true,
+    reconnectionAttempts: 5
 });
 
 let currentRoom = null;
@@ -12,11 +12,7 @@ let draggedIndex = null;
 let botTurnTimeout = null;
 
 socket.on("connect", () => {
-    console.log("[SOCKET] Berhasil terhubung ke server dengan ID:", socket.id);
-});
-
-socket.on("connect_error", (err) => {
-    console.error("[SOCKET] Gagal terhubung ke server:", err);
+    console.log("[SOCKET] Terhubung ke server:", socket.id);
 });
 
 function createLobby() {
@@ -26,7 +22,7 @@ function createLobby() {
     const isSpec = document.getElementById('is-spectator').checked;
     if(!name) return alert("Masukkan Nama!");
     
-    console.log("[LOBBY] Membuat room baru...");
+    console.log("[LOBBY] Mengirim create_room...");
     socket.emit('create_room', { 
         name: name, 
         joker_option: joker, 
@@ -41,7 +37,7 @@ function joinLobby() {
     const isSpec = document.getElementById('is-spectator').checked;
     if(!name || !room) return alert("Isi Nama dan Kode Room!");
 
-    console.log("[LOBBY] Bergabung ke room:", room);
+    console.log("[LOBBY] Mengirim join_room:", room);
     socket.emit('join_room', { name: name, room_code: room, is_spectator: isSpec });
 }
 
@@ -117,15 +113,12 @@ socket.on('game_update', (state) => {
         document.getElementById('turn-indicator').innerText = 
             (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
 
-        // --- KONTROL BOT OTOMATIS DI FRONTEND (AMAN & BEBAS TIMEOUT) ---
         if (botTurnTimeout) clearTimeout(botTurnTimeout);
 
         if (!isMyTurn && state.game_started && !state.game_over) {
             botTurnTimeout = setTimeout(() => {
-                // 1. Bot otomatis cangkul
                 socket.emit('draw_card', { room_code: currentRoom, source: 'deck' });
 
-                // 2. Bot otomatis buang kartu setelah jeda singkat
                 setTimeout(() => {
                     socket.emit('discard_card', {
                         room_code: currentRoom,
@@ -226,7 +219,6 @@ function renderMyMelds(myMelds) {
 
 function syncAndRenderHand(serverHand) {
     const serverCardIds = serverHand.map(c => c.id);
-
     myHandCards = myHandCards.filter(c => serverCardIds.includes(c.id));
 
     serverHand.forEach(serverCard => {
@@ -237,7 +229,6 @@ function syncAndRenderHand(serverHand) {
     });
 
     selectedCards = selectedCards.filter(id => serverCardIds.includes(id));
-
     renderHandUI();
 }
 
