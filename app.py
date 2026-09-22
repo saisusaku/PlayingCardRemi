@@ -159,7 +159,7 @@ def handle_discard(data):
                 game.start_new_round()
                 broadcast_game_state(room_code)
 
-            # Pemicu giliran bot berikutnya
+            # Pemicu giliran bot berikutnya secara beruntun jika diperlukan
             check_and_trigger_bot(room_code)
 
 
@@ -168,18 +168,33 @@ def check_and_trigger_bot(room_code):
         return
         
     game = rooms[room_code]
-    curr_sid = game.get_current_player_sid()
     
-    # Cek apakah giliran saat ini milik Bot
-    if curr_sid and game.players.get(curr_sid, {}).get('is_bot'):
-        socketio.sleep(0.8) # Jeda waktu berpikir bot
+    # Perulangan aman untuk menangani giliran bot secara berurutan
+    while game.game_started and not game.game_over:
+        curr_sid = game.get_current_player_sid()
+        curr_player = game.players.get(curr_sid, {})
+        
+        # Jika giliran saat ini bukan bot (kembali ke pemain manusia), hentikan loop
+        if not curr_player.get('is_bot'):
+            break
+
+        # Jeda waktu natural agar server Render tidak mengalami timeout / worker lock
+        socketio.sleep(1)
         
         # 1. Bot Cangkul jika belum ambil kartu
         if not game.has_drawn:
-            game.draw_from_deck(curr_sid)
-            broadcast_game_state(room_code)
-            socketio.sleep(0.5)
-        
+            if len(game.deck) > 0:
+                game.draw_from_deck(curr_sid)
+                broadcast_game_state(room_code)
+                socketio.sleep(0.5)
+            else:
+                details, game_ended = game.calculate_scores()
+                emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
+                socketio.sleep(5)
+                game.start_new_round()
+                broadcast_game_state(room_code)
+                continue
+
         bot_p = game.players[curr_sid]
         has_series = len(bot_p['melds']['series']) > 0
         
@@ -194,18 +209,18 @@ def check_and_trigger_bot(room_code):
             broadcast_game_state(room_code)
             socketio.sleep(0.5)
 
-        # 3. Bot Buang Kartu (Handling 4 Return Values)
-        if len(bot_p['hand']) == 1:
-            card_to_discard = bot_p['hand'][0]['id']
-            success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=True)
-        else:
-            if bot_p['hand']:
-                card_to_discard = bot_p['hand'][0]['id']
-                success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=False)
+        # 3. Bot Buang Kartu
+        details = None
+        if len(bot_p['hand']) > 0:
+            non_jokers = [c for c in bot_p['hand'] if c['type'] != 'joker']
+            card_to_discard = (non_jokers[0]['id'] if non_jokers else bot_p['hand'][0]['id'])
+            is_tutupan = (len(bot_p['hand']) == 1)
+            
+            success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
 
         broadcast_game_state(room_code)
 
-        # Jika ada yang tutup/ronde selesai
+        # Jika ronde selesai akibat bot tutup atau habis cangkulan
         if details is not None:
             emit('round_summary', {
                 'details': details,
@@ -220,9 +235,6 @@ def check_and_trigger_bot(room_code):
                 
             game.start_new_round()
             broadcast_game_state(room_code)
-
-        # Panggil kembali untuk bot berikutnya jika turn masih di bot lain
-        check_and_trigger_bot(room_code)
 
 def get_lobby_players(game):
     return [{'sid': p['sid'], 'name': p['name'], 'is_spectator': p['is_spectator'], 'score': p['score']} for p in game.players.values()]
@@ -266,14 +278,11 @@ def broadcast_game_state(room_code):
 
 @app.after_request
 def add_header(response):
-    # Izinkan iframe dari cPanel
     response.headers['X-Frame-Options'] = 'ALLOWALL'
     
-    # Hanya cache file gambar di dalam folder static selama 7 hari
     if request.path.startswith('/static/images/') and (request.path.endswith('.png') or request.path.endswith('.jpg') or request.path.endswith('.jpeg')):
         response.headers['Cache-Control'] = 'public, max-age=604800'
     else:
-        # Untuk CSS, JS, dan file lainnya, pastikan selalu fresh / tidak di-cache lama
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         
     return response
