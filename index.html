@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Remi / Jauh Online</title>
-    <!-- URL absolut CSS ke Render -->
-    <link rel="stylesheet" href="https://playingcardremi.onrender.com/static/css/style.css">
+    <!-- Jalur lokal statis dari GitHub Pages -->
+    <link rel="stylesheet" href="static/css/style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
@@ -145,7 +145,7 @@
     <script>
         function preloadCardSprite() {
             const img = new Image();
-            img.src = "https://playingcardremi.onrender.com/static/images/card_sprite.png";
+            img.src = "static/images/card_sprite.png";
             
             let progress = 0;
             const loadingBar = document.getElementById("loading-bar");
@@ -182,7 +182,7 @@
         });
     </script>
 
-    <!-- URL absolut JavaScript ke Render -->
-    <script src="https://playingcardremi.onrender.com/static/js/main.js"></script>
+    <!-- Jalur lokal JavaScript dari GitHub Pages -->
+    <script src="static/js/main.js"></script>
 </body>
 </html>
