@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Remi / Jauh Online</title>
     <!-- Jalur lokal statis dari GitHub Pages -->
     <link rel="stylesheet" href="static/css/style.css">
@@ -10,8 +10,8 @@
 </head>
 <body>
 
-    <!-- TOMBOL FULL SCREEN UTAMA -->
-    <button id="fullscreen-btn" onclick="toggleFullScreen()" style="position: fixed; top: 10px; right: 15px; z-index: 999999; padding: 6px 12px; background: rgba(39, 174, 96, 0.9); color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">
+    <!-- TOMBOL FULL SCREEN (Layar Penuh) -->
+    <button id="fullscreen-btn" onclick="toggleFullScreen()" style="position: fixed; top: 10px; right: 15px; z-index: 99999; padding: 6px 12px; background: #27ae60; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">
         🖥️ Layar Penuh
     </button>
 
@@ -112,7 +112,7 @@
                 </div>
 
                 <!-- SERI & PATAHAN -->
-                <div class="melds-container" style="margin-top: 5px;">
+                <div class="melds-container" style="margin-top: 10px;">
                     <div class="melds-title">SERI & PATAHAN ANDA</div>
                     <div id="my-melds" class="melds-row"></div>
                 </div>
