@@ -106,18 +106,21 @@ def is_valid_patahan_set(cards):
 def find_possible_melds_for_bot(hand, has_existing_series=False):
     from itertools import combinations
     
-    for r in range(len(hand), 2, -1):
-        for combo in combinations(hand, r):
-            if is_valid_run_series(list(combo)):
-                return 'series', [c['id'] for c in combo]
+    # Dioptimalkan dengan membatasi ukuran kombinasi pencarian bot agar tidak memicu memory overload
+    for r in [4, 3]:
+        if len(hand) >= r:
+            for combo in combinations(hand, r):
+                if is_valid_run_series(list(combo)):
+                    return 'series', [c['id'] for c in combo]
 
-    for r in range(len(hand), 2, -1):
-        for combo in combinations(hand, r):
-            combo_list = list(combo)
-            if is_valid_patahan_set(combo_list):
-                is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
-                if has_existing_series or is_four_aces:
-                    return 'patahan', [c['id'] for c in combo]
+    for r in [4, 3]:
+        if len(hand) >= r:
+            for combo in combinations(hand, r):
+                combo_list = list(combo)
+                if is_valid_patahan_set(combo_list):
+                    is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
+                    if has_existing_series or is_four_aces:
+                        return 'patahan', [c['id'] for c in combo]
 
     return None, None
 
