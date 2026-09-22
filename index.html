@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Remi / Jauh Online</title>
-    <!-- Jalur lokal statis dari GitHub Pages -->
+    <!-- Jalur lokal statis -->
     <link rel="stylesheet" href="static/css/style.css">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
@@ -18,10 +18,10 @@
     <!-- LOADING SCREEN OVERLAY -->
     <div id="loading-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#fff; font-family:'Segoe UI', Arial, sans-serif;">
         <div style="font-size: 40px; margin-bottom: 15px;">🎴</div>
-        <h2 style="color:#f1c40f; margin:0 0 10px 0;">Memuat Aset Kartu...</h2>
-        <p style="color:#94a3b8; font-size:14px; margin:0;">Mohon tunggu sebentar, sedang menyiapkan meja permainan.</p>
+        <h2 id="loading-title" style="color:#f1c40f; margin:0 0 10px 0;">Menghubungkan ke Server...</h2>
+        <p id="loading-desc" style="color:#94a3b8; font-size:14px; margin:0;">Membangunkan server dan menyiapkan meja permainan.</p>
         <div style="width: 200px; height: 6px; background: #2a2a2a; border-radius: 3px; margin-top: 20px; overflow: hidden;">
-            <div id="loading-bar" style="width: 0%; height: 100%; background: #27ae60; transition: width 0.3s ease;"></div>
+            <div id="loading-bar" style="width: 10%; height: 100%; background: #27ae60; transition: width 0.3s ease;"></div>
         </div>
     </div>
 
@@ -73,12 +73,9 @@
             <!-- AREA LAWAN ATAS -->
             <div id="opponent-top" class="opponent-slot top-slot"></div>
 
-            <!-- AREA MIDDLE (KIRI, MEJA TENGAH, KANAN) -->
+            <!-- AREA MIDDLE -->
             <div class="middle-layout">
-                <!-- LAWAN KIRI -->
                 <div id="opponent-left" class="opponent-slot side-slot"></div>
-
-                <!-- MEJA TENGAH -->
                 <div class="center-table">
                     <div class="deck-stack" onclick="drawCard('deck')">
                         <div class="card-back"></div>
@@ -89,8 +86,6 @@
                         <div id="discard-pile" class="card-stack-horizontal"></div>
                     </div>
                 </div>
-
-                <!-- LAWAN KANAN -->
                 <div id="opponent-right" class="opponent-slot side-slot"></div>
             </div>
 
@@ -99,9 +94,7 @@
                 <div class="player-header">
                     <h3>Kartu Anda (<span id="turn-indicator"></span>)</h3>
                 </div>
-                
                 <div id="my-hand" class="card-row"></div>
-
                 <div class="action-buttons">
                     <button onclick="drawCard('deck')">Cangkul 1 Kartu</button>
                     <button onclick="laySeries()">Turunkan Seri</button>
@@ -110,8 +103,6 @@
                     <button onclick="discardSelectedCard(false)">Buang Kartu</button>
                     <button onclick="discardSelectedCard(true)" class="btn-win">Tutup (Menang)</button>
                 </div>
-
-                <!-- SERI & PATAHAN -->
                 <div class="melds-container" style="margin-top: 10px;">
                     <div class="melds-title">SERI & PATAHAN ANDA</div>
                     <div id="my-melds" class="melds-row"></div>
@@ -125,7 +116,6 @@
     <div id="score-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
         <div style="background:#1e1e1e; padding:25px; border-radius:12px; width:90%; max-width:550px; text-align:center; box-shadow:0 0 25px #27ae60;">
             <h2 id="modal-title" style="color:#f1c40f; margin-top:0;">📋 HASIL RONDE</h2>
-            
             <table style="width:100%; color:#fff; border-collapse:collapse; margin:15px 0; font-size:13px;">
                 <thead>
                     <tr style="border-bottom:2px solid #444; color:#a0aec0;">
@@ -139,14 +129,13 @@
                 </thead>
                 <tbody id="modal-score-body"></tbody>
             </table>
-
             <div style="font-size:14px; color:#e2e8f0; margin-top:10px;">
                 <span id="countdown-timer" style="color:#e74c3c; font-weight:bold; font-size:16px;">5</span> detik lagi ronde berikutnya dimulai...
             </div>
         </div>
     </div>
 
-    <!-- SCRIPT FULLSCREEN & PRELOADER -->
+    <!-- SCRIPT UTAMA: LOADING GABUNGAN ASET + KONEKSI SERVER -->
     <script>
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
@@ -160,22 +149,12 @@
             }
         }
 
-        function preloadCardSprite() {
-            const img = new Image();
-            img.src = "static/images/card_sprite.png";
-            
-            let progress = 0;
-            const loadingBar = document.getElementById("loading-bar");
-            
-            const interval = setInterval(() => {
-                if (progress < 90) {
-                    progress += 10;
-                    if (loadingBar) loadingBar.style.width = progress + "%";
-                }
-            }, 150);
+        let assetLoaded = false;
+        let serverConnected = false;
 
-            img.onload = function() {
-                clearInterval(interval);
+        function checkReadyToDismiss() {
+            const loadingBar = document.getElementById("loading-bar");
+            if (assetLoaded && serverConnected) {
                 if (loadingBar) loadingBar.style.width = "100%";
                 setTimeout(() => {
                     const loadingScreen = document.getElementById("loading-screen");
@@ -185,21 +164,54 @@
                         setTimeout(() => loadingScreen.remove(), 500);
                     }
                 }, 300);
+            }
+        }
+
+        // 1. Pengecekan Aset Kartu
+        function preloadCardSprite() {
+            const img = new Image();
+            img.src = "static/images/card_sprite.png";
+            
+            img.onload = function() {
+                assetLoaded = true;
+                document.getElementById("loading-bar").style.width = "60%";
+                checkReadyToDismiss();
             };
 
             img.onerror = function() {
-                clearInterval(interval);
-                const loadingScreen = document.getElementById("loading-screen");
-                if (loadingScreen) loadingScreen.remove();
+                // Walaupun gambar gagal, tetap lanjut agar game tidak stuck di loading
+                assetLoaded = true; 
+                checkReadyToDismiss();
             };
         }
 
+        // 2. Pengecekan Koneksi Server via Socket.io (Biasanya diinisialisasi di main.js, 
+        // tapi kita bisa pantau global socket atau berikan event callback)
         window.addEventListener("DOMContentLoaded", () => {
             preloadCardSprite();
+
+            // Kita buat fungsi penanda server siap yang bisa dipanggil dari main.js 
+            // ketika event 'connect' dari socket berhasil terhubung.
+            window.notifyServerReady = function() {
+                serverConnected = true;
+                document.getElementById("loading-bar").style.width = "90%";
+                document.getElementById("loading-title").innerText = "Siap Bermain!";
+                document.getElementById("loading-desc").innerText = "Koneksi server berhasil terhubung.";
+                checkReadyToDismiss();
+            };
+
+            // Fallback pengaman (jika dalam 8 detik socket lama merespons karena cold start, 
+            // kita buka paksa loading screen agar user tidak menunggu selamanya)
+            setTimeout(() => {
+                if (!serverConnected) {
+                    serverConnected = true;
+                    checkReadyToDismiss();
+                }
+            }, 8000);
         });
     </script>
 
-    <!-- Jalur lokal JavaScript dari GitHub Pages -->
+    <!-- Jalur lokal JavaScript -->
     <script src="static/js/main.js"></script>
 </body>
 </html>
