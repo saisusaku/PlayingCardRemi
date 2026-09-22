@@ -173,7 +173,6 @@ class RemiGameState:
 
         starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
         
-        # Jika giliran pertama memegang 8 kartu (bukan bot), langsung anggap sudah mencangkul (has_drawn = True)
         self.has_drawn = True if not starter_is_bot else False
         self.starter_must_discard = True if not starter_is_bot else False
 
@@ -192,7 +191,6 @@ class RemiGameState:
             return False, "Bukan giliran Anda!"
         
         p = self.players[sid]
-        # Pastikan pemain yang memegang 8 kartu di awal tidak bisa mencangkul
         if len(p['hand']) >= 8 and not p.get('is_bot'):
             return False, "Anda sudah memegang 8 kartu di awal ronde, silakan buang kartu!"
         
