@@ -171,7 +171,6 @@ def check_and_trigger_bot(room_code):
         
     game = rooms[room_code]
     
-    # Pastikan hanya satu proses bot berjalan
     if getattr(game, 'is_processing_bots', False):
         return
         
@@ -182,11 +181,11 @@ def check_and_trigger_bot(room_code):
             curr_sid = game.get_current_player_sid()
             curr_player = game.players.get(curr_sid, {})
             
-            # Jika giliran bukan bot, hentikan
+            # Jika bukan giliran bot, hentikan
             if not curr_player.get('is_bot'):
                 return
 
-            # 1. Bot Cangkul jika belum ambil kartu
+            # 1. Bot Bodoh Cangkul dari Dek
             if not game.has_drawn:
                 if len(game.deck) > 0:
                     game.draw_from_deck(curr_sid)
@@ -194,28 +193,16 @@ def check_and_trigger_bot(room_code):
                 else:
                     details, game_ended = game.calculate_scores()
                     emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
-                    socketio.sleep(3)
+                    socketio.sleep(2)
                     game.start_new_round()
                     broadcast_game_state(room_code)
                     return
 
+            # 2. Bot Bodoh Langsung Buang Kartu Pertama di Tangan (Tanpa Hitung Kombinasi)
             bot_p = game.players[curr_sid]
-            has_series = len(bot_p['melds']['series']) > 0
-            
-            # 2. Bot Cek Kombinasi (Tanpa gelung kombinasi yang berat)
-            meld_type, card_ids = find_possible_melds_for_bot(bot_p['hand'], has_existing_series=has_series)
-            if meld_type == 'series':
-                game.lay_down_series(curr_sid, card_ids)
-                broadcast_game_state(room_code)
-            elif meld_type == 'patahan':
-                game.lay_down_patahan(curr_sid, card_ids)
-                broadcast_game_state(room_code)
-
-            # 3. Bot Buang Kartu
             details = None
             if len(bot_p['hand']) > 0:
-                non_jokers = [c for c in bot_p['hand'] if c['type'] != 'joker']
-                card_to_discard = (non_jokers[0]['id'] if non_jokers else bot_p['hand'][0]['id'])
+                card_to_discard = bot_p['hand'][0]['id']
                 is_tutupan = (len(bot_p['hand']) == 1)
                 
                 success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
@@ -228,7 +215,7 @@ def check_and_trigger_bot(room_code):
                     'game_ended': game_ended,
                     'delay': 5
                 }, to=room_code)
-                socketio.sleep(3)
+                socketio.sleep(2)
                 if game_ended:
                     game.reset_game_scores()
                 game.start_new_round()
