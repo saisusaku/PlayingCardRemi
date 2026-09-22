@@ -10,6 +10,16 @@
 </head>
 <body>
 
+    <!-- LOADING SCREEN OVERLAY -->
+    <div id="loading-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#fff; font-family:'Segoe UI', Arial, sans-serif;">
+        <div style="font-size: 40px; margin-bottom: 15px;">🎴</div>
+        <h2 style="color:#f1c40f; margin:0 0 10px 0;">Memuat Aset Kartu...</h2>
+        <p style="color:#94a3b8; font-size:14px; margin:0;">Mohon tunggu sebentar, sedang menyiapkan meja permainan.</p>
+        <div style="width: 200px; height: 6px; background: #2a2a2a; border-radius: 3px; margin-top: 20px; overflow: hidden;">
+            <div id="loading-bar" style="width: 0%; height: 100%; background: #27ae60; transition: width 0.3s ease;"></div>
+        </div>
+    </div>
+
     <!-- LOBBY CONTAINER -->
     <div id="lobby-container" class="panel">
         <h1>🎴 Remi / Jauh Online</h1>
@@ -131,6 +141,47 @@
             </div>
         </div>
     </div>
+
+    <!-- SCRIPT PRELOADER & SOCKET -->
+    <script>
+        function preloadCardSprite() {
+            const img = new Image();
+            img.src = "https://playingcardremi.onrender.com/static/images/card_sprite.png";
+            
+            let progress = 0;
+            const loadingBar = document.getElementById("loading-bar");
+            
+            const interval = setInterval(() => {
+                if (progress < 90) {
+                    progress += 10;
+                    if (loadingBar) loadingBar.style.width = progress + "%";
+                }
+            }, 150);
+
+            img.onload = function() {
+                clearInterval(interval);
+                if (loadingBar) loadingBar.style.width = "100%";
+                setTimeout(() => {
+                    const loadingScreen = document.getElementById("loading-screen");
+                    if (loadingScreen) {
+                        loadingScreen.style.opacity = "0";
+                        loadingScreen.style.transition = "opacity 0.5s ease";
+                        setTimeout(() => loadingScreen.remove(), 500);
+                    }
+                }, 300);
+            };
+
+            img.onerror = function() {
+                clearInterval(interval);
+                const loadingScreen = document.getElementById("loading-screen");
+                if (loadingScreen) loadingScreen.remove();
+            };
+        }
+
+        window.addEventListener("DOMContentLoaded", () => {
+            preloadCardSprite();
+        });
+    </script>
 
     <!-- Diubah ke URL absolut Render -->
     <script src="https://playingcardremi.onrender.com/static/js/main.js"></script>
