@@ -27,7 +27,6 @@ def handle_create_room(data):
     rooms[room_code] = game
 
     join_room(room_code)
-    print(f"[ROOM] Room dibuat: {room_code} oleh {name}")
     emit('room_created', {
         'room_code': room_code,
         'is_admin': True,
@@ -52,7 +51,6 @@ def handle_join_room(data):
 
     game.add_player(request.sid, name, is_spectator)
     join_room(room_code)
-    print(f"[ROOM] {name} bergabung ke room {room_code}")
 
     is_admin = (game.admin_sid == request.sid)
     emit('room_joined', {
@@ -81,7 +79,6 @@ def handle_start_game(data):
         game.game_started = True
         game.reset_game_scores()
         game.start_new_round()
-        print(f"[GAME] Dimulai di room {room_code}. Giliran pertama: {game.get_current_player_sid()}")
         broadcast_game_state(room_code)
 
 @socketio.on('draw_card')
@@ -93,7 +90,6 @@ def handle_draw_card(data):
 
     if room_code in rooms:
         game = rooms[room_code]
-        print(f"[ACTION] draw_card dipanggil oleh {request.sid} dari source: {from_source}")
         if from_source == 'deck':
             success, msg = game.draw_from_deck(request.sid)
         else:
@@ -103,10 +99,8 @@ def handle_draw_card(data):
             )
 
         if not success:
-            print(f"[ACTION FAILED] draw_card error: {msg}")
             emit('error_msg', {'message': msg})
         else:
-            print(f"[ACTION SUCCESS] draw_card sukses: {msg}")
             broadcast_game_state(room_code)
             
 @socketio.on('lay_patahan')
@@ -143,14 +137,11 @@ def handle_discard(data):
 
     if room_code in rooms:
         game = rooms[room_code]
-        print(f"[ACTION] discard_card dipanggil oleh {request.sid}, kartu: {card_id}")
         success, msg, game_ended, details = game.discard_card(request.sid, card_id, is_tutupan)
         
         if not success:
-            print(f"[ACTION FAILED] discard error: {msg}")
             emit('error_msg', {'message': msg})
         else:
-            print(f"[ACTION SUCCESS] discard sukses. Game ended: {game_ended}")
             broadcast_game_state(room_code)
             
             if details is not None:
@@ -164,62 +155,6 @@ def handle_discard(data):
                     game.reset_game_scores()
                 game.start_new_round()
                 broadcast_game_state(room_code)
-
-@socketio.on('trigger_bot_turn')
-def handle_trigger_bot(data):
-    room_code = data.get('room_code')
-    if room_code not in rooms:
-        return
-        
-    game = rooms[room_code]
-    if not game.game_started or game.game_over:
-        return
-        
-    curr_sid = game.get_current_player_sid()
-    curr_player = game.players.get(curr_sid, {})
-    
-    if not curr_player.get('is_bot'):
-        return
-
-    print(f"[BOT TURN] Menjalankan giliran bot: {curr_sid} ({curr_player.get('name')})")
-
-    # 1. Bot Cangkul otomatis jika belum mencangkul
-    if not game.has_drawn:
-        if len(game.deck) > 0:
-            game.draw_from_deck(curr_sid)
-            print(f"[BOT ACTION] Bot {curr_player.get('name')} berhasil mencangkul.")
-            broadcast_game_state(room_code)
-            return
-        else:
-            details, game_ended = game.calculate_scores()
-            emit('round_summary', {'details': details, 'game_ended': game_ended, 'delay': 5}, to=room_code)
-            game.start_new_round()
-            broadcast_game_state(room_code)
-            return
-
-    # 2. Bot Buang Kartu otomatis
-    bot_p = game.players[curr_sid]
-    details = None
-    if len(bot_p['hand']) > 0:
-        card_to_discard = bot_p['hand'][0]['id']
-        is_tutupan = (len(bot_p['hand']) == 1)
-        success, msg, game_ended, details = game.discard_card(curr_sid, card_to_discard, is_tutupan=is_tutupan)
-        print(f"[BOT ACTION] Bot {curr_player.get('name')} membuang kartu: {card_to_discard}")
-
-    broadcast_game_state(room_code)
-
-    if details is not None:
-        emit('round_summary', {
-            'details': details,
-            'game_ended': game_ended,
-            'delay': 5
-        }, to=room_code)
-        
-        if game_ended:
-            game.reset_game_scores()
-            
-        game.start_new_round()
-        broadcast_game_state(room_code)
 
 def get_lobby_players(game):
     return [{'sid': p['sid'], 'name': p['name'], 'is_spectator': p['is_spectator'], 'score': p['score']} for p in game.players.values()]
@@ -259,12 +194,14 @@ def broadcast_game_state(room_code):
                 'is_my_turn': (curr_turn_sid == sid),
                 'has_drawn': game.has_drawn,
                 'game_started': game.game_started,
-                'game_over': game.game_over
+                'game_over': game.game_over,
+                'current_turn_sid': curr_turn_sid
             }
         emit('game_update', state, to=sid)
 
 @app.after_request
 def add_header(response):
+    response.headers['X-Process-Control'] = 'allow'
     response.headers['X-Frame-Options'] = 'ALLOWALL'
     if request.path.startswith('/static/images/') and (request.path.endswith('.png') or request.path.endswith('.jpg') or request.path.endswith('.jpeg')):
         response.headers['Cache-Control'] = 'public, max-age=604800'
