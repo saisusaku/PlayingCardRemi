@@ -1,4 +1,6 @@
-const socket = io("https://playingcardremi.onrender.com/");
+const socket = io("https://playingcardremi.onrender.com/", {
+    transports: ["websocket"]
+});
 let currentRoom = null;
 let selectedCards = [];
 let myHandCards = []; 
