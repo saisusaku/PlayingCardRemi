@@ -101,10 +101,6 @@ def is_valid_patahan_set(cards):
     return False
 
 
-def find_possible_melds_for_bot(hand, has_existing_series=False):
-    return None, None
-
-
 class RemiGameState:
     def __init__(self, room_id, joker_option=0, target_bot_count=3):
         self.room_id = room_id
