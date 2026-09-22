@@ -168,6 +168,7 @@ class RemiGameState:
                     self.players[sid]['hand'].append(self.deck.pop())
 
         starter_is_bot = self.players.get(starter_sid, {}).get('is_bot', False)
+        # Jika pemain pertama manusia, dia sudah memegang 8 kartu dan tidak perlu cangkul lagi di awal
         self.has_drawn = True if not starter_is_bot else False
         self.starter_must_discard = True if not starter_is_bot else False
 
@@ -185,21 +186,26 @@ class RemiGameState:
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
         
-        p = self.players[sid]
-        if len(p['hand']) >= 8 and not p.get('is_bot'):
-            return False, "Anda sudah memegang 8 kartu di awal ronde, silakan buang kartu!"
+        # ATURAN: Cek apakah pemain sudah mencangkul atau mengambil kartu pada giliran ini
+        if self.has_drawn:
+            return False, "Anda sudah mencangkul atau mengambil kartu pada giliran ini! Silakan buang kartu."
         
         if len(self.deck) == 0:
             return False, "Cangkulan sudah habis!"
         
+        p = self.players[sid]
         card = self.deck.pop()
         p['hand'].append(card)
-        self.has_drawn = True
+        self.has_drawn = True  # Kunci cangkul agar tidak bisa mencangkul lagi sebelum buang kartu
         return True, "Kartu berhasil dicangkul."
 
     def draw_from_discard(self, sid, card_id, selected_hand_card_ids=None):
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
+
+        # ATURAN: Cek apakah pemain sudah mengambil kartu pada giliran ini
+        if self.has_drawn:
+            return False, "Anda sudah mengambil kartu pada giliran ini! Silakan buang kartu."
 
         card_indices = [i for i, c in enumerate(self.discard_pile) if c['id'] == card_id]
         if not card_indices:
@@ -234,7 +240,7 @@ class RemiGameState:
 
         self.players[sid]['hand'].extend(cards_to_take)
         self.discard_pile = self.discard_pile[:idx]
-        self.has_drawn = True
+        self.has_drawn = True  # Kunci agar tidak bisa mengambil/mencangkul lagi di giliran ini
 
         meld_card_ids = [c['id'] for c in meld_combination]
         self.players[sid]['hand'] = [c for c in self.players[sid]['hand'] if c['id'] not in meld_card_ids]
@@ -280,6 +286,7 @@ class RemiGameState:
 
         p = self.players[sid]
         
+        # VALIDASI: Pemain wajib cangkul/mengambil kartu terlebih dahulu pada giliran ini sebelum boleh buang
         if not self.has_drawn and not p.get('is_bot', False):
             return False, "Anda harus cangkul atau mengambil kartu terlebih dahulu sebelum membuang!", False, None
         
