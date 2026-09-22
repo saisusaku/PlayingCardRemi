@@ -205,11 +205,11 @@ button:hover { background: #219150; }
 .card-sprite.anim-draw { animation: drawCardAnim 0.25s ease-out; }
 .card-sprite.anim-discard { animation: discardCardAnim 0.25s ease-out; }
 
-/* SPRITE KARTU UTAMA */
+/* SPRITE KARTU UTAMA (Path diperbaiki relatif terhadap folder static/css/) */
 .card-sprite {
     width: 68px;
     height: 87px;
-    background-image: url('https://playingcardremi.onrender.com/static/images/card_sprite.png');
+    background-image: url('../images/card_sprite.png');
     background-size: 1045px 408px;
     border-radius: 4px;
     cursor: grab;
@@ -228,20 +228,6 @@ button:hover { background: #219150; }
 
 .card-sprite:active { cursor: grabbing; }
 .card-sprite:hover { transform: translateY(-10px); }
-
-.card-sprite {
-    width: 68px;
-    height: 87px;
-    background-image: url('/static/images/card_sprite.png');
-    background-size: 1045px 408px;
-    border-radius: 4px;
-    cursor: grab;
-    user-select: none;
-    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
-    position: relative;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
 .card-sprite.dragging { opacity: 0.4; transform: scale(0.95); }
 
 .card-back {
