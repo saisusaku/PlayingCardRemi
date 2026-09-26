@@ -58,7 +58,9 @@ async def process_bot_turns(room_code):
             
             await broadcast_game_state(room_code)
             
-            if details is not None:
+            # Jika bot melakukan tutupan, permainan masuk ke round_ending, bot otomatis klik finish round
+            if game.round_ending:
+                details, game_ended = game.finish_round_scoring()
                 summary_data = {
                     'type': 'round_summary',
                     'details': details,
@@ -74,13 +76,13 @@ async def process_bot_turns(room_code):
                     game.reset_game_scores()
                 game.start_new_round()
                 await broadcast_game_state(room_code)
-                
-                # Cek ulang apakah giliran berikutnya langsung bot lagi
-                next_sid = game.get_current_player_sid()
-                if game.players.get(next_sid, {}).get('is_bot', False):
-                    continue
-                else:
-                    break
+
+            # Cek ulang apakah giliran berikutnya langsung bot lagi
+            next_sid = game.get_current_player_sid()
+            if game.players.get(next_sid, {}).get('is_bot', False):
+                continue
+            else:
+                break
         await asyncio.sleep(1.5)
 
 async def broadcast_game_state(room_code):
@@ -107,6 +109,7 @@ async def broadcast_game_state(room_code):
                             'hand_count': len(pl['hand'])
                         } for pl_sid, pl in game.players.items() if not pl['is_spectator']],
                         "is_my_turn": False,
+                        "round_ending": game.round_ending,
                         "game_started": game.game_started,
                         "game_over": game.game_over
                     }
@@ -127,6 +130,7 @@ async def broadcast_game_state(room_code):
                         } for pl_sid, pl in game.players.items() if pl_sid != sid and not pl['is_spectator']],
                         "is_my_turn": (curr_turn_sid == sid),
                         "has_drawn": game.has_drawn,
+                        "round_ending": game.round_ending,  # <-- PENTING AGAR TOMBOL SELESAI AKTIF DI CLIENT
                         "game_started": game.game_started,
                         "game_over": game.game_over,
                         "current_turn_sid": curr_turn_sid
@@ -158,7 +162,6 @@ async def handler(websocket):
                 name = data.get("name", "Player")
                 is_spectator = data.get("is_spectator", False)
                 joker_option = int(data.get("joker_option", 0))
-                # Diperbarui agar mendukung hingga 3 bot maksimal (full 4 pemain di meja)
                 bot_count_option = min(3, max(0, int(data.get("bot_count_option", 1))))
                 room_code = str(random.randint(1000, 9999))
 
@@ -224,7 +227,6 @@ async def handler(websocket):
                     game.start_new_round()
                     await broadcast_game_state(room_code)
 
-                    # Pastikan bot langsung terpicu jika pemain pertama adalah bot
                     curr_sid = game.get_current_player_sid()
                     if game.players.get(curr_sid, {}).get('is_bot', False):
                         asyncio.create_task(process_bot_turns(room_code))
@@ -282,20 +284,28 @@ async def handler(websocket):
                         await websocket.send(json.dumps({"type": "error_msg", "message": msg}))
                     else:
                         await broadcast_game_state(room_code)
-                        if details is not None:
-                            summary_data = {
-                                'type': 'round_summary',
-                                'details': details,
-                                'game_ended': game_ended,
-                                'delay': 5
-                            }
-                            for ws in game.active_webs.values():
-                                await ws.send(json.dumps(summary_data))
 
-                            if game_ended:
-                                game.reset_game_scores()
-                            game.start_new_round()
-                            await broadcast_game_state(room_code)
+            elif action == "finish_round":
+                room_code = data.get("room_code")
+                if room_code in rooms:
+                    game = rooms[room_code]
+                    if game.round_ending:
+                        details, game_ended = game.finish_round_scoring()
+                        summary_data = {
+                            'type': 'round_summary',
+                            'details': details,
+                            'game_ended': game_ended,
+                            'delay': 5
+                        }
+                        for ws in game.active_webs.values():
+                            try:
+                                await ws.send(json.dumps(summary_data))
+                            except:
+                                pass
+                        if game_ended:
+                            game.reset_game_scores()
+                        game.start_new_round()
+                        await broadcast_game_state(room_code)
 
     except websockets.exceptions.ConnectionClosed:
         pass
