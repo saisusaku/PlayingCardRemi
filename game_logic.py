@@ -103,11 +103,16 @@ def is_valid_patahan_set(cards):
 
 
 def find_possible_melds_for_bot(hand, has_existing_series=False):
-    # Kembali menggunakan struktur original persis seperti kode Anda
+    # Bot hanya boleh menggunakan kombinasi tanpa joker, atau jika bot akan tutup (sisa kartu setelah turun == 1)
     for r in range(len(hand), 2, -1):
         for combo in combinations(hand, r):
             combo_list = list(combo)
-            # Urutkan numerik untuk memastikan validasi seri terbaca akurat
+            has_joker = any(c['type'] == 'joker' for c in combo_list)
+            
+            # Jika mengandung joker, pastikan setelah turun ini kartu tangan bot sisa tepat 1
+            if has_joker and (len(hand) - r != 1):
+                continue
+
             sorted_combo = sorted(combo_list, key=lambda c: NUMERIC_ORDER.get(c['rank'], 0) if c['type'] == 'normal' else 99)
             if is_valid_run_series(sorted_combo):
                 return 'series', [c['id'] for c in combo], sorted_combo
@@ -115,6 +120,11 @@ def find_possible_melds_for_bot(hand, has_existing_series=False):
     for r in range(len(hand), 2, -1):
         for combo in combinations(hand, r):
             combo_list = list(combo)
+            has_joker = any(c['type'] == 'joker' for c in combo_list)
+            
+            if has_joker and (len(hand) - r != 1):
+                continue
+
             if is_valid_patahan_set(combo_list):
                 is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
                 if has_existing_series or is_four_aces:
@@ -242,6 +252,10 @@ class RemiGameState:
         p = self.players[sid]
         selected_hand_cards = [c for c in p['hand'] if c['id'] in (selected_hand_card_ids or [])]
         
+        # Joker tidak boleh digunakan untuk mengambil kartu dari bawah (meja)
+        if any(c['type'] == 'joker' for c in selected_hand_cards):
+            return False, "Kartu Joker tidak boleh digunakan untuk mengambil kartu dari bawah/meja!"
+
         meld_combination = selected_hand_cards + [target_card]
         detected_meld_type = None
 
@@ -281,6 +295,13 @@ class RemiGameState:
         p = self.players[sid]
         selected_cards = [c for c in p['hand'] if c['id'] in card_ids]
 
+        has_joker = any(c['type'] == 'joker' for c in selected_cards)
+        if has_joker:
+            # Validasi aturan ketat: Joker hanya boleh turun jika setelah melds ini turun, kartu di tangan sisa tepat 1 (artinya mau tutup)
+            remaining_in_hand = len(p['hand']) - len(card_ids)
+            if remaining_in_hand != 1:
+                return False, "Kartu Joker hanya bisa diturunkan saat hendak Tutup (menyisakan 1 kartu di tangan)!"
+
         if not is_valid_run_series(selected_cards):
             return False, "Seri tidak sah!"
 
@@ -291,6 +312,12 @@ class RemiGameState:
     def lay_down_patahan(self, sid, card_ids):
         p = self.players[sid]
         selected_cards = [c for c in p['hand'] if c['id'] in card_ids]
+
+        has_joker = any(c['type'] == 'joker' for c in selected_cards)
+        if has_joker:
+            remaining_in_hand = len(p['hand']) - len(card_ids)
+            if remaining_in_hand != 1:
+                return False, "Kartu Joker hanya bisa diturunkan saat hendak Tutup (menyisakan 1 kartu di tangan)!"
 
         has_existing_series = len(p['melds']['series']) > 0
         is_four_aces = (len(selected_cards) == 4 and all(c['rank'] == 'A' for c in selected_cards))
