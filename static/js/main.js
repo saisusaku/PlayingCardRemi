@@ -1,439 +1,204 @@
-const wsProtocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-const wsHost = "playingcardremi.onrender.com"; 
-const ws = new WebSocket(`${wsProtocol}${wsHost}`);
-
-let currentRoom = null;
-let selectedCards = [];
-let myHandCards = []; 
-let draggedIndex = null;
-
-ws.onopen = () => {
-    console.log("[WS] Terhubung langsung secara kilat ke server!");
-    if (typeof window.notifyServerReady === 'function') {
-        window.notifyServerReady();
-    }
-};
-
-ws.onerror = (err) => {
-    console.error("[WS] Koneksi error:", err);
-};
-
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    
-    if (data.type === 'room_created') {
-        currentRoom = data.room_code;
-        document.getElementById('display-room-code').innerText = currentRoom;
-        document.getElementById('lobby-room-info').style.display = 'block';
-        if(data.is_admin) document.getElementById('start-btn').style.display = 'block';
-    } 
-    else if (data.type === 'room_joined') {
-        currentRoom = data.room_code;
-        document.getElementById('display-room-code').innerText = currentRoom;
-        document.getElementById('lobby-room-info').style.display = 'block';
-    } 
-    else if (data.type === 'update_lobby') {
-        const list = document.getElementById('player-list');
-        list.innerHTML = '';
-        data.players.forEach(p => {
-            const li = document.createElement('li');
-            li.innerText = `${p.name} ${p.is_spectator ? '(Penonton)' : ''} - Skor: ${p.score}`;
-            list.appendChild(li);
-        });
-    } 
-    else if (data.type === 'game_update') {
-        handleGameUpdate(data);
-    } 
-    else if (data.type === 'error_msg') {
-        alert(data.message);
-    } 
-    else if (data.type === 'round_summary') {
-        handleRoundSummary(data);
-    }
-};
-
-function createLobby() {
-    const name = document.getElementById('player-name').value;
-    const joker = document.getElementById('joker-option').value;
-    const botCount = document.getElementById('bot-count-option').value;
-    const isSpec = document.getElementById('is-spectator').checked;
-    if(!name) return alert("Masukkan Nama!");
-    
-    ws.send(JSON.stringify({
-        action: 'create_room',
-        name: name,
-        joker_option: joker,
-        bot_count_option: botCount,
-        is_spectator: isSpec
-    }));
-}
-
-function joinLobby() {
-    const name = document.getElementById('player-name').value;
-    const room = document.getElementById('room-code-input').value;
-    const isSpec = document.getElementById('is-spectator').checked;
-    if(!name || !room) return alert("Isi Nama dan Kode Room!");
-
-    ws.send(JSON.stringify({
-        action: 'join_room',
-        name: name,
-        room_code: room,
-        is_spectator: isSpec
-    }));
-}
-
-function startGame() {
-    ws.send(JSON.stringify({
-        action: 'start_game',
-        room_code: currentRoom
-    }));
-}
-
-function handleGameUpdate(state) {
-    document.getElementById('lobby-container').style.display = 'none';
-    document.getElementById('game-container').style.display = 'block';
-    
-    document.getElementById('deck-count').innerText = `Sisa: ${state.deck_count}`;
-    
-    const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
-    if (drawBtn) {
-        if (state.has_drawn || !state.is_my_turn) {
-            drawBtn.disabled = true;
-            drawBtn.style.opacity = '0.5';
-            drawBtn.style.cursor = 'not-allowed';
-        } else {
-            drawBtn.disabled = false;
-            drawBtn.style.opacity = '1';
-            drawBtn.style.cursor = 'pointer';
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Game Remi / Jauh Online</title>
+    <link rel="stylesheet" href="static/css/style.css">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #090d16;
+            font-family: 'Segoe UI', Arial, sans-serif;
         }
-    }
+        #game-viewport {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
 
-    const discardDiv = document.getElementById('discard-pile');
-    discardDiv.innerHTML = '';
+    <div id="game-viewport">
+        <!-- LOADING SCREEN -->
+        <div id="loading-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#fff;">
+            <div style="font-size: 40px; margin-bottom: 15px;">🎴</div>
+            <h2 id="loading-title" style="color:#f1c40f; margin:0 0 10px 0;">Menghubungkan ke Server...</h2>
+            <p id="loading-desc" style="color:#94a3b8; font-size:14px; margin:0;">Membangunkan server dan menyiapkan meja permainan.</p>
+            <div style="width: 200px; height: 6px; background: #2a2a2a; border-radius: 3px; margin-top: 20px; overflow: hidden;">
+                <div id="loading-bar" style="width: 10%; height: 100%; background: #27ae60; transition: width 0.3s ease;"></div>
+            </div>
+        </div>
 
-    if (state.table_cards && state.table_cards.length > 0) {
-        state.table_cards.forEach((card, idx) => {
-            const cardEl = renderCardSprite(card);
-            cardEl.style.zIndex = idx + 1; 
-            if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
+        <!-- LOBBY CONTAINER -->
+        <div id="lobby-container" class="panel">
+            <h1>🎴 Remi / Jauh Online</h1>
+            <div class="form-group">
+                <label>Nama Pemain:</label>
+                <input type="text" id="player-name" placeholder="Masukkan nama..." autocomplete="off" required>
+            </div>
+            <div class="form-group">
+                <label>Jumlah Bot (isi slot kosong):</label>
+                <select id="bot-count-option">
+                    <option value="0">0 Bot (Main Sendiri / Kosong)</option>
+                    <option value="1">1 Bot</option>
+                    <option value="2">2 Bot</option>
+                    <option value="3" selected>3 Bot (Full Meja 4 Pemain)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Opsi Joker:</label>
+                <select id="joker-option">
+                    <option value="0">Tanpa Joker</option>
+                    <option value="1">1 Joker</option>
+                    <option value="2">2 Joker</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="is-spectator"> Masuk sebagai Penonton (Spectator)
+                </label>
+            </div>
+            <div class="button-group">
+                <button onclick="createLobby()">Buat Lobby</button>
+                <button onclick="joinLobby()">Gabung Lobby</button>
+            </div>
+            <input type="text" id="room-code-input" placeholder="Kode Room (untuk gabung)" autocomplete="off">
             
-            cardEl.onclick = () => {
-                if (idx === state.table_cards.length - 1) {
-                    drawCard('discard', card.id);
-                } else {
-                    drawCard('discard', card.id);
-                }
+            <div id="lobby-room-info" style="display:none; margin-top: 15px;">
+                <h3>Kode Room: <span id="display-room-code"></span></h3>
+                <h4>Daftar Pemain dalam Lobby:</h4>
+                <ul id="player-list"></ul>
+                <button id="start-btn" style="display:none;" onclick="startGame()">Mulai Permainan</button>
+            </div>
+        </div>
+
+        <!-- GAME TABLE CONTAINER -->
+        <div id="game-container" style="display:none; width: 100%; height: 100%;">
+            <div class="poker-table" style="width: 100%; height: 100%;">
+                
+                <!-- AREA LAWAN ATAS -->
+                <div id="opponent-top" class="opponent-slot top-slot"></div>
+
+                <!-- AREA MIDDLE -->
+                <div class="middle-layout">
+                    <div id="opponent-left" class="opponent-slot side-slot"></div>
+                    <div class="center-table">
+                        <div class="deck-stack" onclick="drawCard('deck')">
+                            <div class="card-back"></div>
+                            <span id="deck-count">Sisa: 0</span>
+                        </div>
+                        <div class="discard-area">
+                            <div class="discard-title">KARTU TERBUKA DI MEJA</div>
+                            <div id="discard-pile" class="card-stack-horizontal"></div>
+                        </div>
+                    </div>
+                    <div id="opponent-right" class="opponent-slot side-slot"></div>
+                </div>
+
+                <!-- AREA PLAYER BAWAH -->
+                <div class="player-bottom">
+                    <div class="player-header">
+                        <h3>Kartu Anda (<span id="turn-indicator"></span>)</h3>
+                    </div>
+                    <div id="my-hand" class="card-row"></div>
+                    <div class="action-buttons">
+                        <button onclick="drawCard('deck')">Cangkul 1 Kartu</button>
+                        <button onclick="laySeries()">Turunkan Seri</button>
+                        <button onclick="layPatahan()">Turunkan Patahan</button>
+                        <button onclick="sortHand()">⚡ Susun Kartu (Auto)</button>
+                        <button onclick="discardSelectedCard(false)">Buang Kartu</button>
+                        <button onclick="discardSelectedCard(true)" class="btn-win">Tutup (Menang)</button>
+                    </div>
+                    <div class="melds-container" style="margin-top: 5px;">
+                        <div class="melds-title">SERI & PATAHAN ANDA</div>
+                        <div id="my-melds" class="melds-row"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- MODAL SCORE SUMMARY -->
+        <div id="score-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
+            <div style="background:#1e1e1e; padding:20px; border-radius:12px; width:90%; max-width:500px; text-align:center; box-shadow:0 0 25px #27ae60; color: #fff;">
+                <h2 id="modal-title" style="color:#f1c40f; font-size:20px; margin-top:0;">📋 HASIL RONDE</h2>
+                <table style="width:100%; color:#fff; border-collapse:collapse; margin:10px 0; font-size:13px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #444; color:#a0aec0;">
+                            <th style="padding:6px; text-align:left;">Pemain</th>
+                            <th style="padding:6px;">Turun</th>
+                            <th style="padding:6px;">Tangan</th>
+                            <th style="padding:6px;">Tutup</th>
+                            <th style="padding:6px;">Ronde</th>
+                            <th style="padding:6px; color:#2ecc71;">TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-score-body"></tbody>
+                </table>
+                <div style="font-size:13px; color:#e2e8f0; margin-top:10px;">
+                    <span id="countdown-timer" style="color:#e74c3c; font-weight:bold; font-size:15px;">5</span> detik lagi ronde berikutnya dimulai...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let assetLoaded = false;
+        let serverConnected = false;
+
+        function checkReadyToDismiss() {
+            const loadingBar = document.getElementById("loading-bar");
+            if (assetLoaded && serverConnected) {
+                if (loadingBar) loadingBar.style.width = "100%";
+                setTimeout(() => {
+                    const loadingScreen = document.getElementById("loading-screen");
+                    if (loadingScreen) {
+                        loadingScreen.style.opacity = "0";
+                        loadingScreen.style.transition = "opacity 0.5s ease";
+                        setTimeout(() => loadingScreen.remove(), 500);
+                    }
+                }, 300);
+            }
+        }
+
+        function preloadCardSprite() {
+            const img = new Image();
+            img.src = "static/images/card_sprite.png";
+            img.onload = function() {
+                assetLoaded = true;
+                document.getElementById("loading-bar").style.width = "60%";
+                checkReadyToDismiss();
             };
+            img.onerror = function() {
+                assetLoaded = true; 
+                checkReadyToDismiss();
+            };
+        }
 
-            discardDiv.appendChild(cardEl);
+        window.addEventListener("DOMContentLoaded", () => {
+            preloadCardSprite();
+            window.notifyServerReady = function() {
+                serverConnected = true;
+                document.getElementById("loading-bar").style.width = "90%";
+                document.getElementById("loading-title").innerText = "Siap Bermain!";
+                document.getElementById("loading-desc").innerText = "Koneksi server berhasil terhubung.";
+                checkReadyToDismiss();
+            };
+            setTimeout(() => {
+                if (!serverConnected) {
+                    serverConnected = true;
+                    checkReadyToDismiss();
+                }
+            }, 8000);
         });
-        discardDiv.scrollLeft = discardDiv.scrollWidth;
-    }
-
-    renderOpponentsPositions(state.opponents || state.players || []);
-
-    if (state.hand !== undefined) {
-        syncAndRenderHand(state.hand);
-        renderMyMelds(state.my_melds || []);
-
-        const isMyTurn = state.is_my_turn;
-        const myScore = state.my_score !== undefined ? state.my_score : 0;
-        
-        document.getElementById('turn-indicator').innerText = 
-            (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
-    }
-}
-
-function renderOpponentsPositions(opponents) {
-    const topSlot = document.getElementById('opponent-top');
-    const leftSlot = document.getElementById('opponent-left');
-    const rightSlot = document.getElementById('opponent-right');
-
-    if (topSlot) topSlot.innerHTML = '';
-    if (leftSlot) leftSlot.innerHTML = '';
-    if (rightSlot) rightSlot.innerHTML = '';
-
-    const slots = [leftSlot, topSlot, rightSlot].filter(slot => slot !== null);
-
-    opponents.forEach((op, index) => {
-        if (index < slots.length) {
-            const opCard = createOpponentCardElement(op);
-            slots[index].appendChild(opCard);
-        }
-    });
-}
-
-function createOpponentCardElement(op) {
-    const opDiv = document.createElement('div');
-    opDiv.className = 'opponent-card';
-    opDiv.innerHTML = `<strong>${op.name}</strong><br><small>Tangan: ${op.hand_count || 0} | Skor: ${op.score}</small>`;
-
-    const meldsDiv = document.createElement('div');
-    meldsDiv.className = 'melds-row';
-    meldsDiv.style.marginTop = '4px';
-
-    if (op.melds && op.melds.series) {
-        op.melds.series.forEach(series => {
-            const group = document.createElement('div');
-            group.className = 'card-stack-horizontal';
-            group.style.height = '60px';
-            series.forEach((card, idx) => {
-                const cEl = renderCardSprite(card);
-                cEl.style.transform = 'scale(0.65)';
-                cEl.style.margin = '-20px -25px';
-                cEl.style.zIndex = idx;
-                group.appendChild(cEl);
-            });
-            meldsDiv.appendChild(group);
-        });
-    }
-
-    opDiv.appendChild(meldsDiv);
-    return opDiv;
-}
-
-function renderMyMelds(myMelds) {
-    const meldsDiv = document.getElementById('my-melds');
-    if(!meldsDiv) return;
-    meldsDiv.innerHTML = '';
-
-    if(myMelds) {
-        if(myMelds.series) {
-            myMelds.series.forEach(series => {
-                const group = document.createElement('div');
-                group.className = 'card-stack-horizontal';
-                series.forEach((card, idx) => {
-                    const cEl = renderCardSprite(card);
-                    cEl.style.zIndex = idx;
-                    group.appendChild(cEl);
-                });
-                meldsDiv.appendChild(group);
-            });
-        }
-        if(myMelds.patahan) {
-            myMelds.patahan.forEach(patahan => {
-                const group = document.createElement('div');
-                group.className = 'card-stack-horizontal';
-                patahan.forEach((card, idx) => {
-                    const cEl = renderCardSprite(card);
-                    cEl.style.zIndex = idx;
-                    group.appendChild(cEl);
-                });
-                meldsDiv.appendChild(group);
-            });
-        }
-    }
-}
-
-function syncAndRenderHand(serverHand) {
-    const serverCardIds = serverHand.map(c => c.id);
-    myHandCards = myHandCards.filter(c => serverCardIds.includes(c.id));
-
-    serverHand.forEach(serverCard => {
-        const exists = myHandCards.some(c => c.id === serverCard.id);
-        if (!exists) {
-            myHandCards.push(serverCard);
-        }
-    });
-
-    selectedCards = selectedCards.filter(id => serverCardIds.includes(id));
-    renderHandUI();
-}
-
-function renderHandUI() {
-    const handDiv = document.getElementById('my-hand');
-    handDiv.innerHTML = '';
-
-    myHandCards.forEach((card, index) => {
-        const cardEl = renderCardSprite(card);
-        cardEl.setAttribute('draggable', 'true');
-        cardEl.dataset.index = index;
-
-        if (selectedCards.includes(card.id)) {
-            cardEl.classList.add('selected');
-        }
-
-        cardEl.onclick = () => toggleSelectCard(card.id, cardEl);
-
-        cardEl.addEventListener('dragstart', handleDragStart);
-        cardEl.addEventListener('dragover', handleDragOver);
-        cardEl.addEventListener('drop', handleDrop);
-        cardEl.addEventListener('dragend', handleDragEnd);
-
-        handDiv.appendChild(cardEl);
-    });
-}
-
-function handleDragStart(e) {
-    draggedIndex = parseInt(this.dataset.index);
-    this.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    const targetIndex = parseInt(this.dataset.index);
-    if (draggedIndex !== null && draggedIndex !== targetIndex) {
-        const movedCard = myHandCards.splice(draggedIndex, 1)[0];
-        myHandCards.splice(targetIndex, 0, movedCard);
-        renderHandUI();
-    }
-}
-
-function handleDragEnd() {
-    this.classList.remove('dragging');
-    draggedIndex = null;
-}
-
-function toggleSelectCard(cardId, element) {
-    const idx = selectedCards.indexOf(cardId);
-    if(idx > -1) {
-        selectedCards.splice(idx, 1);
-        element.classList.remove('selected');
-    } else {
-        selectedCards.push(cardId);
-        element.classList.add('selected');
-    }
-}
-
-function drawCard(source, cardId=null) {
-    if (source === 'deck') {
-        ws.send(JSON.stringify({
-            action: 'draw_card',
-            room_code: currentRoom,
-            source: 'deck'
-        }));
-    } else if (source === 'discard') {
-        ws.send(JSON.stringify({
-            action: 'draw_card',
-            room_code: currentRoom,
-            source: 'discard',
-            card_id: cardId,
-            selected_hand_card_ids: selectedCards
-        }));
-        
-        selectedCards = [];
-    }
-}
-
-function laySeries() {
-    if(selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Seri!");
-    ws.send(JSON.stringify({
-        action: 'lay_series',
-        room_code: currentRoom,
-        card_ids: selectedCards
-    }));
-    selectedCards = [];
-}
-
-function layPatahan() {
-    if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
-    ws.send(JSON.stringify({
-        action: 'lay_patahan',
-        room_code: currentRoom,
-        card_ids: selectedCards
-    }));
-    selectedCards = [];
-}
-
-function discardSelectedCard(isTutupan) {
-    if (selectedCards.length === 0) {
-        return alert("Pilih 1 kartu untuk dibuang!");
-    }
-    
-    const cardToDiscard = selectedCards[selectedCards.length - 1];
-    
-    ws.send(JSON.stringify({
-        action: 'discard_card',
-        room_code: currentRoom,
-        card_id: cardToDiscard,
-        is_tutupan: isTutupan
-    }));
-    
-    selectedCards = [];
-}
-
-function sortHand() {
-    const rankOrder = {'2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13, 'A':14, 'JOKER':99};
-    const suitOrder = {'clubs':1, 'spades':2, 'hearts':3, 'diamonds':4, 'joker':5};
-
-    myHandCards.sort((a, b) => {
-        if (suitOrder[a.suit] !== suitOrder[b.suit]) {
-            return suitOrder[a.suit] - suitOrder[b.suit];
-        }
-        return rankOrder[a.rank] - rankOrder[b.rank];
-    });
-
-    renderHandUI();
-}
-
-const CARD_X_OFFSETS = [
-    12, 84, 158, 232, 304, 378, 452, 525, 600, 672, 747, 819, 894, 968
-];
-
-const CARD_Y_OFFSETS = [
-    9, 109, 209, 311
-];
-
-function renderCardSprite(card) {
-    const div = document.createElement('div');
-    div.className = 'card-sprite';
-    
-    const posX = -CARD_X_OFFSETS[card.sprite_col]; 
-    const posY = -CARD_Y_OFFSETS[card.sprite_row];
-    
-    div.style.backgroundPosition = `${posX}px ${posY}px`;
-    return div;
-}
-
-function handleRoundSummary(data) {
-    const modal = document.getElementById('score-modal');
-    const tbody = document.getElementById('modal-score-body');
-    const title = document.getElementById('modal-title');
-    const timerSpan = document.getElementById('countdown-timer');
-
-    tbody.innerHTML = '';
-    
-    if(data.game_ended) {
-        title.innerText = "🏆 PERMAINAN SELESAI (MEMENANGKAN 500 PTS)!";
-    } else {
-        title.innerText = "📋 HASIL RONDE & PERHITUNGAN SKOR";
-    }
-
-    data.details.forEach(d => {
-        const tr = document.createElement('tr');
-        tr.style.borderBottom = '1px solid #333';
-        if(d.is_winner) tr.style.background = 'rgba(39, 174, 96, 0.2)';
-
-        tr.innerHTML = `
-            <td style="padding:8px; text-align:left;"><strong>${d.name}</strong> ${d.is_winner ? '👑' : ''}</td>
-            <td style="padding:8px; color:#2ecc71;">+${d.pts_down}</td>
-            <td style="padding:8px; color:#e74c3c;">${d.pts_hand}</td>
-            <td style="padding:8px; color:#f1c40f;">+${d.bonus_tutupan}</td>
-            <td style="padding:8px;">${d.round_total}</td>
-            <td style="padding:8px; font-weight:bold; color:#2ecc71;">${d.accumulated_score}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    modal.style.display = 'flex';
-
-    let timeLeft = data.delay || 5;
-    timerSpan.innerText = timeLeft;
-    
-    const interval = setInterval(() => {
-        timeLeft -= 1;
-        if(timeLeft >= 0) {
-            timerSpan.innerText = timeLeft;
-        }
-        if (timeLeft <= 0) {
-            clearInterval(interval);
-            modal.style.display = 'none';
-        }
-    }, 1000);
-}
+    </script>
+    <script src="static/js/main.js"></script>
+</body>
+</html>
