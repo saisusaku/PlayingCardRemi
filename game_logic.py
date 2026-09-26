@@ -102,6 +102,20 @@ def is_valid_patahan_set(cards):
     return False
 
 
+def get_card_score_value(card, meld_cards=None):
+    if card['type'] != 'joker':
+        return CARD_VALUES.get(card['rank'], 5)
+    
+    # Jika kartu adalah joker dan berada di dalam meld (seri/patahan), nilai mengikuti kartu yang dibantu
+    if meld_cards:
+        normals = [c for c in meld_cards if c['type'] != 'joker']
+        if normals:
+            # Ambil nilai dari kartu normal pertama dalam kelompok tersebut
+            sample_rank = normals[0]['rank']
+            return CARD_VALUES.get(sample_rank, 5)
+    return 5
+
+
 def find_possible_melds_for_bot(hand, has_existing_series=False):
     for r in range(len(hand), 2, -1):
         for combo in combinations(hand, r):
@@ -149,6 +163,12 @@ class RemiGameState:
         self.has_drawn = False
         self.starter_must_discard = False
         self.admin_sid = None
+        
+        # State Akhir Ronde
+        self.round_ending = False
+        self.pending_winner_sid = None
+        self.pending_tutupan_card = None
+        self.joker_allowed_in_melds = False
 
     def add_player(self, sid, name, is_spectator=False):
         if not self.admin_sid:
@@ -178,6 +198,10 @@ class RemiGameState:
     def start_new_round(self):
         self.deck = create_deck(self.joker_option)
         self.discard_pile = []
+        self.round_ending = False
+        self.pending_winner_sid = None
+        self.pending_tutupan_card = None
+        self.joker_allowed_in_melds = False
 
         for sid in self.player_order:
             self.players[sid]['hand'] = []
@@ -215,6 +239,8 @@ class RemiGameState:
         self.current_turn_index = (self.current_turn_index + 1) % len(self.player_order)
 
     def draw_from_deck(self, sid):
+        if self.round_ending:
+            return False, "Permainan sudah memasuki tahap akhir ronde!"
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
         if self.has_drawn:
@@ -228,6 +254,8 @@ class RemiGameState:
         return True, "Kartu berhasil dicangkul."
 
     def draw_from_discard(self, sid, card_id, selected_hand_card_ids=None):
+        if self.round_ending:
+            return False, "Permainan sudah memasuki tahap akhir ronde!"
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!"
         if self.has_drawn:
@@ -294,9 +322,14 @@ class RemiGameState:
 
         has_joker = any(c['type'] == 'joker' for c in selected_cards)
         if has_joker:
-            remaining_in_hand = len(p['hand']) - len(card_ids)
-            if remaining_in_hand != 1:
-                return False, "Kartu Joker hanya bisa diturunkan saat hendak Tutup (menyisakan 1 kartu di tangan)!"
+            # Jika sedang di akhir ronde karena cangkulan habis, joker boleh membantu. Jika karena tutup, tidak boleh.
+            if self.round_ending and not self.joker_allowed_in_melds:
+                return False, "Kartu Joker tidak bisa membantu saat ada pemain yang tutup!"
+            
+            if not self.round_ending:
+                remaining_in_hand = len(p['hand']) - len(card_ids)
+                if remaining_in_hand != 1:
+                    return False, "Kartu Joker hanya bisa diturunkan saat hendak Tutup (menyisakan 1 kartu di tangan)!"
 
         if not is_valid_run_series(selected_cards):
             return False, "Seri tidak sah!"
@@ -311,9 +344,13 @@ class RemiGameState:
 
         has_joker = any(c['type'] == 'joker' for c in selected_cards)
         if has_joker:
-            remaining_in_hand = len(p['hand']) - len(card_ids)
-            if remaining_in_hand != 1:
-                return False, "Kartu Joker hanya bisa diturunkan saat hendak Tutup (menyisakan 1 kartu di tangan)!"
+            if self.round_ending and not self.joker_allowed_in_melds:
+                return False, "Kartu Joker tidak bisa membantu saat ada pemain yang tutup!"
+            
+            if not self.round_ending:
+                remaining_in_hand = len(p['hand']) - len(card_ids)
+                if remaining_in_hand != 1:
+                    return False, "Kartu Joker hanya bisa diturunkan saat hendak Tutup (menyisakan 1 kartu di tangan)!"
 
         has_existing_series = len(p['melds']['series']) > 0
         is_four_aces = (len(selected_cards) == 4 and all(c['rank'] == 'A' for c in selected_cards))
@@ -329,6 +366,8 @@ class RemiGameState:
         return True, "Patahan berhasil diturunkan!"
 
     def discard_card(self, sid, card_id, is_tutupan=False):
+        if self.round_ending:
+            return False, "Permainan sudah masuk tahap akhir ronde!", False, None
         if self.get_current_player_sid() != sid:
             return False, "Bukan giliran Anda!", False, None
 
@@ -357,76 +396,85 @@ class RemiGameState:
 
         p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
 
+        # Masuk ke State Akhir Ronde (Round Ending) alih-alih langsung menghitung skor
         if is_tutupan or len(p['hand']) == 0:
-            details, game_ended = self.calculate_scores(winner_sid=sid, tutupan_card=card)
-            return True, "Permainan Selesai (Tutupan)!", game_ended, details
+            self.round_ending = True
+            self.pending_winner_sid = sid
+            self.pending_tutupan_card = card
+            self.joker_allowed_in_melds = False  # Saat tutup, joker tidak bisa membantu pemain lain
+            return True, "Pemain Tutup! Silakan turunkan sisa kartu Anda ke meja.", False, None
 
         self.discard_pile.append(card)
 
         if len(self.deck) == 0:
-            details, game_ended = self.calculate_scores()
-            return True, "Permainan Selesai (Cangkulan Habis)!", game_ended, details
+            self.round_ending = True
+            self.pending_winner_sid = None
+            self.pending_tutupan_card = None
+            self.joker_allowed_in_melds = True  # Saat cangkulan habis, joker bisa membantu
+            return True, "Cangkulan Habis! Silakan turunkan sisa kartu Anda ke meja.", False, None
 
         self.starter_must_discard = False
         self.next_turn()
         return True, "Kartu dibuang.", False, None
 
-    def calculate_scores(self, winner_sid=None, tutupan_card=None):
-        # 1. Jika cangkulan habis (deck kosong) atau ada pemain yang tutup (winner_sid)
-        is_game_end_condition = (len(self.deck) == 0 or winner_sid is not None)
+    def finish_round_scoring(self):
+        """Dipanggil setelah pemain selesai menurunkan kartu di state akhir ronde"""
+        winner_sid = self.pending_winner_sid
+        tutupan_card = self.pending_tutupan_card
         
-        if is_game_end_condition:
-            for sid in self.player_order:
-                # Pemenang yang menutup tidak perlu dicek ulang tangannya karena sudah sisa 1 kartu
-                if winner_sid and sid == winner_sid:
-                    continue
+        # Proses sisa tangan pemain lain/semua pemain untuk menurunkan kombinasi yang valid
+        for sid in self.player_order:
+            if winner_sid and sid == winner_sid:
+                continue
 
-                p = self.players[sid]
-                
-                # Cek Seri dari tangan murni TANPA JOKER (Joker tidak bisa membantu saat tutup/cangkulan habis bagi pemain lain)
-                changed = True
-                while changed:
-                    changed = False
-                    for r in range(len(p['hand']), 2, -1):
-                        found_combo = None
-                        for combo in combinations(p['hand'], r):
-                            combo_list = list(combo)
-                            # Pastikan tidak ada joker di dalam kombinasi pengecekan ini
-                            if any(c['type'] == 'joker' for c in combo_list):
-                                continue
-                            sorted_combo = sorted(combo_list, key=lambda c: NUMERIC_ORDER.get(c['rank'], 0) if c['type'] == 'normal' else 99)
-                            if is_valid_run_series(sorted_combo):
-                                found_combo = sorted_combo
+            p = self.players[sid]
+            allow_joker = self.joker_allowed_in_melds
+
+            # 1. Cek Seri dari tangan
+            changed = True
+            while changed:
+                changed = False
+                for r in range(len(p['hand']), 2, -1):
+                    found_combo = None
+                    for combo in combinations(p['hand'], r):
+                        combo_list = list(combo)
+                        has_joker = any(c['type'] == 'joker' for c in combo_list)
+                        if has_joker and not allow_joker:
+                            continue
+                        sorted_combo = sorted(combo_list, key=lambda c: NUMERIC_ORDER.get(c['rank'], 0) if c['type'] == 'normal' else 99)
+                        if is_valid_run_series(sorted_combo):
+                            found_combo = sorted_combo
+                            break
+                    if found_combo:
+                        combo_ids = [c['id'] for c in found_combo]
+                        p['hand'] = [c for c in p['hand'] if c['id'] not in combo_ids]
+                        p['melds']['series'].append(found_combo)
+                        changed = True
+                        break
+
+            # 2. Cek Patahan dari tangan
+            changed_patahan = True
+            while changed_patahan:
+                changed_patahan = False
+                for r in range(len(p['hand']), 2, -1):
+                    found_patahan = None
+                    for combo in combinations(p['hand'], r):
+                        combo_list = list(combo)
+                        has_joker = any(c['type'] == 'joker' for c in combo_list)
+                        if has_joker and not allow_joker:
+                            continue
+                        if is_valid_patahan_set(combo_list):
+                            has_series = len(p['melds']['series']) > 0
+                            is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
+                            if has_series or is_four_aces:
+                                found_patahan = combo_list
                                 break
-                        if found_combo:
-                            combo_ids = [c['id'] for c in found_combo]
-                            p['hand'] = [c for c in p['hand'] if c['id'] not in combo_ids]
-                            p['melds']['series'].append(found_combo)
-                            changed = True
-                            break
-
-                # Cek Patahan dari tangan murni TANPA JOKER
-                changed_patahan = True
-                while changed_patahan:
-                    changed_patahan = False
-                    for r in range(len(p['hand']), 2, -1):
-                        found_patahan = None
-                        for combo in combinations(p['hand'], r):
-                            combo_list = list(combo)
-                            if any(c['type'] == 'joker' for c in combo_list):
-                                continue
-                            if is_valid_patahan_set(combo_list):
-                                has_series = len(p['melds']['series']) > 0
-                                is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
-                                if has_series or is_four_aces:
-                                    found_patahan = combo_list
-                                    break
-                        if found_patahan:
-                            combo_ids = [c['id'] for c in found_patahan]
-                            p['hand'] = [c for c in p['hand'] if c['id'] not in combo_ids]
-                            p['melds']['patahan'].append(found_patahan)
-                            changed_patahan = True
-                            break
+                    if found_patahan:
+                        combo_ids = [c['id'] for c in found_patahan]
+                        p['hand'] = [c for c in p['hand'] if c['id'] not in combo_ids]
+                        p['melds']['patahan'].append(found_patahan)
+                        changed_patahan = True
+                        break
 
         score_details = []
         
@@ -438,10 +486,10 @@ class RemiGameState:
             
             for s in p['melds']['series']:
                 for card in s:
-                    pts_down += CARD_VALUES.get(card['rank'], 5)
+                    pts_down += get_card_score_value(card, s)
             for pt in p['melds']['patahan']:
                 for card in pt:
-                    pts_down += CARD_VALUES.get(card['rank'], 5)
+                    pts_down += get_card_score_value(card, pt)
             
             for card in p['hand']:
                 if card['type'] == 'joker':
