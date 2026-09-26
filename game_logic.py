@@ -1,4 +1,5 @@
 import random
+from itertools import combinations
 
 SUITS = ['clubs', 'spades', 'hearts', 'diamonds']
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
@@ -102,12 +103,14 @@ def is_valid_patahan_set(cards):
 
 
 def find_possible_melds_for_bot(hand, has_existing_series=False):
-    from itertools import combinations
-    
+    # Kembali menggunakan struktur original persis seperti kode Anda
     for r in range(len(hand), 2, -1):
         for combo in combinations(hand, r):
-            if is_valid_run_series(list(combo)):
-                return 'series', [c['id'] for c in combo]
+            combo_list = list(combo)
+            # Urutkan numerik untuk memastikan validasi seri terbaca akurat
+            sorted_combo = sorted(combo_list, key=lambda c: NUMERIC_ORDER.get(c['rank'], 0) if c['type'] == 'normal' else 99)
+            if is_valid_run_series(sorted_combo):
+                return 'series', [c['id'] for c in combo], sorted_combo
 
     for r in range(len(hand), 2, -1):
         for combo in combinations(hand, r):
@@ -115,9 +118,9 @@ def find_possible_melds_for_bot(hand, has_existing_series=False):
             if is_valid_patahan_set(combo_list):
                 is_four_aces = (len(combo_list) == 4 and all(c['rank'] == 'A' for c in combo_list))
                 if has_existing_series or is_four_aces:
-                    return 'patahan', [c['id'] for c in combo]
+                    return 'patahan', [c['id'] for c in combo], combo_list
 
-    return None, None
+    return None, None, None
 
 
 class RemiGameState:
@@ -181,19 +184,15 @@ class RemiGameState:
         starter_sid = self.player_order[start_idx]
 
         for sid in self.player_order:
-            # Semua pemain awal mendapatkan 7 kartu standar terlebih dahulu
             count = 7
             for _ in range(count):
                 if self.deck:
                     self.players[sid]['hand'].append(self.deck.pop())
 
-        # KHUSUS PEMAIN PERTAMA (STARTER): Mendapatkan kartu ke-8
         starter_player = self.players[starter_sid]
         if self.deck:
             starter_player['hand'].append(self.deck.pop())
 
-        # KEMBALIKAN KE TRUE: Karena pemain pertama sudah memegang 8 kartu, 
-        # dia dianggap "sudah punya kartu jalan" dan siap membuang atau menurunkan meld tanpa cangkul lagi.
         self.has_drawn = True
         self.starter_must_discard = True
 
@@ -243,13 +242,9 @@ class RemiGameState:
         p = self.players[sid]
         selected_hand_cards = [c for c in p['hand'] if c['id'] in (selected_hand_card_ids or [])]
         
-        # GABUNGKAN KARTU DI TANGAN DAN KARTU DARI MEJA
         meld_combination = selected_hand_cards + [target_card]
-
         detected_meld_type = None
 
-        # PERBAIKAN: Urutkan terlebih dahulu kombinasi kartu numerik sebelum divalidasi 
-        # agar susunan acak dari player (misal 5, 3, 4 + 6) terbaca sah menjadi (3, 4, 5, 6)
         sorted_meld_for_check = sorted(meld_combination, key=lambda c: NUMERIC_ORDER.get(c['rank'], 0) if c['type'] == 'normal' else 99)
 
         if is_valid_patahan_set(meld_combination):
@@ -259,12 +254,11 @@ class RemiGameState:
                 detected_meld_type = 'patahan'
             else:
                 return False, "Untuk Patahan harus sudah ada Seri Murni terlebih dahulu!"
-        elif is_valid_run_series(sorted_meld_for_check):  # Validasi menggunakan list yang sudah terurut
+        elif is_valid_run_series(sorted_meld_for_check):
             detected_meld_type = 'series'
         else:
             return False, "Kombinasi tidak sah!"
 
-        # SIMULASI KARTU SISA
         meld_ids = [c['id'] for c in meld_combination]
         simulated_hand = [c for c in p['hand'] if c['id'] not in meld_ids] + cards_to_take
         if len(simulated_hand) == 0:
@@ -331,19 +325,13 @@ class RemiGameState:
             if not card:
                 return False, "Kartu tidak ada di tangan!", False, None
 
-        # VALIDASI KETAT ATURAN TUTUP (MENANG)
         if is_tutupan:
-            # Sisa kartu di tangan setelah kartu ini dibuang harusnya 0 (artinya sebelum dibuang, di tangan sisa 1 kartu)
             remaining_hand_count = len(p['hand']) - 1
-            
             if remaining_hand_count > 0:
                 return False, "Belum bisa Tutup! Anda harus menurunkan semua Seri dan Patahan ke meja terlebih dahulu hingga sisa 1 kartu di tangan.", False, None
-            
-            # Opsional: Pastikan pemain sudah minimal menurunkan 1 seri murni agar sah menutup
             if len(p['melds']['series']) == 0:
                 return False, "Belum bisa Tutup! Anda harus memiliki minimal 1 Seri Murni yang diturunkan ke meja.", False, None
 
-        # Eksekusi pembuangan kartu dari tangan
         p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
 
         if is_tutupan or len(p['hand']) == 0:
