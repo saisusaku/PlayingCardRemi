@@ -46,6 +46,9 @@ ws.onmessage = (event) => {
     } 
     else if (data.type === 'error_msg') {
         alert(data.message);
+        // RESET PILIHAN KARTU KETIKA TERJADI ERROR AGAR TIDAK DESYNC
+        selectedCards = [];
+        renderHandUI();
     } 
     else if (data.type === 'round_summary') {
         handleRoundSummary(data);
@@ -341,6 +344,7 @@ function drawCard(source, cardId=null) {
         }));
         
         selectedCards = [];
+        renderHandUI();
     }
 }
 
@@ -352,6 +356,7 @@ function laySeries() {
         card_ids: selectedCards
     }));
     selectedCards = [];
+    renderHandUI();
 }
 
 function layPatahan() {
@@ -362,6 +367,7 @@ function layPatahan() {
         card_ids: selectedCards
     }));
     selectedCards = [];
+    renderHandUI();
 }
 
 function discardSelectedCard(isTutupan) {
@@ -379,6 +385,7 @@ function discardSelectedCard(isTutupan) {
     }));
     
     selectedCards = [];
+    renderHandUI();
 }
 
 function sortHand() {
