@@ -9,6 +9,9 @@ let draggedIndex = null;
 
 ws.onopen = () => {
     console.log("[WS] Terhubung langsung secara kilat ke server!");
+    if (typeof window.notifyServerReady === 'function') {
+        window.notifyServerReady();
+    }
 };
 
 ws.onerror = (err) => {
@@ -114,13 +117,10 @@ function handleGameUpdate(state) {
             cardEl.style.zIndex = idx + 1; 
             if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
             
-            // FITUR UTAMA: Mengaktifkan klik pada kartu di meja (baik atas maupun bawah)
             cardEl.onclick = () => {
                 if (idx === state.table_cards.length - 1) {
-                    // Jika klik kartu paling atas di meja
                     drawCard('discard', card.id);
                 } else {
-                    // Jika mengambil kartu di bawah, ingatkan pemain untuk memilih kartu pasangan di tangan terlebih dahulu
                     drawCard('discard', card.id);
                 }
             };
@@ -149,13 +149,11 @@ function renderOpponentsPositions(opponents) {
     const leftSlot = document.getElementById('opponent-left');
     const rightSlot = document.getElementById('opponent-right');
 
-    if (!topSlot || !leftSlot || !rightSlot) return;
+    if (topSlot) topSlot.innerHTML = '';
+    if (leftSlot) leftSlot.innerHTML = '';
+    if (rightSlot) rightSlot.innerHTML = '';
 
-    topSlot.innerHTML = '';
-    leftSlot.innerHTML = '';
-    rightSlot.innerHTML = '';
-
-    const slots = [topSlot, leftSlot, rightSlot];
+    const slots = [leftSlot, topSlot, rightSlot].filter(slot => slot !== null);
 
     opponents.forEach((op, index) => {
         if (index < slots.length) {
@@ -311,7 +309,6 @@ function drawCard(source, cardId=null) {
             source: 'deck'
         }));
     } else if (source === 'discard') {
-        // Jika ingin mengambil kartu di bawah, pastikan memilih kartu pasangan di tangan terlebih dahulu jika diperlukan
         ws.send(JSON.stringify({
             action: 'draw_card',
             room_code: currentRoom,
