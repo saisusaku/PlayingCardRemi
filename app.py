@@ -3,13 +3,13 @@ import json
 import random
 import os
 import websockets
-from game_logic import RemiGameState
+from game_logic import RemiGameState, find_possible_melds_for_bot
 
 rooms = {}
 
 async def process_bot_turns(room_code):
-    """Fungsi otomatis untuk menjalankan giliran bot secara berurutan di server"""
-    await asyncio.sleep(1.5) # Beri jeda sejenak agar pemain sempat melihat meja
+    """Fungsi otomatis untuk menjalankan giliran bot secara cerdas di server"""
+    await asyncio.sleep(1.5)  # Beri jeda agar pemain sempat melihat pergerakan di meja
     while room_code in rooms:
         game = rooms[room_code]
         if not game.game_started or game.game_over:
@@ -19,26 +19,42 @@ async def process_bot_turns(room_code):
         curr_player = game.players.get(curr_sid)
         
         if not curr_player or not curr_player.get('is_bot', False):
-            break # Jika giliran pemain manusia, hentikan loop bot
+            break  # Jika giliran pemain manusia, hentikan loop bot
 
-        # JIKA BOT ADALAH STARTER (PEMAIN PERTAMA): 
-        # Dia sudah memegang 8 kartu dari awal dan has_drawn = True, jadi lewati proses cangkul
+        # 1. Fase Mengambil Kartu (Cangkul)
         if game.starter_must_discard:
-            await asyncio.sleep(1.0)
+            pass  # Pemain pertama sudah memegang 8 kartu dari awal, lewati cangkul
         else:
-            # 1. Bot otomatis cangkul dari deck jika bukan giliran pertama
             success, _ = game.draw_from_deck(curr_sid)
             if success:
                 await broadcast_game_state(room_code)
                 await asyncio.sleep(1.0)
-            else:
-                # Jika gagal cangkul (misal sudah terlanjur ter-flag draw), paksa lanjut buang
-                pass
 
-        # 2. Bot otomatis buang kartu secara acak dari tangannya
+        # 2. Fase Cerdas Bot Menurunkan Melds (Seri / Patahan) secara berulang jika ada yang valid
+        while True:
+            has_series = len(curr_player['melds']['series']) > 0
+            m_type, m_ids, m_cards = find_possible_melds_for_bot(curr_player['hand'], has_series)
+            if not m_type:
+                break
+            
+            # Eksekusi penurunan meld bot ke meja
+            if m_type == 'series':
+                curr_player['hand'] = [c for c in curr_player['hand'] if c['id'] not in m_ids]
+                curr_player['melds']['series'].append(m_cards)
+            elif m_type == 'patahan':
+                curr_player['hand'] = [c for c in curr_player['hand'] if c['id'] not in m_ids]
+                curr_player['melds']['patahan'].append(m_cards)
+            
+            await broadcast_game_state(room_code)
+            await asyncio.sleep(0.8)
+
+        # 3. Fase Membuang Kartu atau Tutupan (Menang)
         if curr_player['hand']:
-            card_to_discard = random.choice(curr_player['hand'])
-            _, _, game_ended, details = game.discard_card(curr_sid, card_to_discard['id'], False)
+            # Bot mengecek apakah bisa Tutup (sisa 1 kartu di tangan dan sudah punya minimal 1 seri)
+            can_close = (len(curr_player['hand']) == 1 and len(curr_player['melds']['series']) > 0)
+            
+            card_to_discard = curr_player['hand'][0]
+            success, _, game_ended, details = game.discard_card(curr_sid, card_to_discard['id'], is_tutupan=can_close)
             
             await broadcast_game_state(room_code)
             
@@ -142,7 +158,8 @@ async def handler(websocket):
                 name = data.get("name", "Player")
                 is_spectator = data.get("is_spectator", False)
                 joker_option = int(data.get("joker_option", 0))
-                bot_count_option = min(1, int(data.get("bot_count_option", 1)))
+                # Diperbarui agar mendukung hingga 3 bot maksimal (full 4 pemain di meja)
+                bot_count_option = min(3, max(0, int(data.get("bot_count_option", 1))))
                 room_code = str(random.randint(1000, 9999))
 
                 game = RemiGameState(room_code, joker_option, bot_count_option)
@@ -194,7 +211,7 @@ async def handler(websocket):
                 room_code = data.get("room_code")
                 if room_code in rooms:
                     game = rooms[room_code]
-                    target_players = min(2, len(game.player_order) + game.target_bot_count)
+                    target_players = min(4, len(game.player_order) + game.target_bot_count)
                     bot_idx = 1
                     while len(game.player_order) < target_players:
                         bot_sid = f"bot_{bot_idx}"
@@ -207,7 +224,7 @@ async def handler(websocket):
                     game.start_new_round()
                     await broadcast_game_state(room_code)
 
-                    # PASTIKAN BOT LANGSUNG TERPICU JIKA PEMAIN PERTAMA ADALAH BOT
+                    # Pastikan bot langsung terpicu jika pemain pertama adalah bot
                     curr_sid = game.get_current_player_sid()
                     if game.players.get(curr_sid, {}).get('is_bot', False):
                         asyncio.create_task(process_bot_turns(room_code))
