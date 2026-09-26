@@ -6,7 +6,6 @@
     <title>Game Remi / Jauh Online</title>
     <!-- Jalur lokal statis -->
     <link rel="stylesheet" href="static/css/style.css">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
 
@@ -36,7 +35,9 @@
             <label>Jumlah Bot (isi slot kosong):</label>
             <select id="bot-count-option">
                 <option value="0">0 Bot (Main Sendiri / Kosong)</option>
-                <option value="1" selected>1 Bot</option>
+                <option value="1">1 Bot</option>
+                <option value="2">2 Bot</option>
+                <option value="3" selected>3 Bot (Full Meja 4 Pemain)</option>
             </select>
         </div>
         <div class="form-group">
@@ -179,19 +180,15 @@
             };
 
             img.onerror = function() {
-                // Walaupun gambar gagal, tetap lanjut agar game tidak stuck di loading
                 assetLoaded = true; 
                 checkReadyToDismiss();
             };
         }
 
-        // 2. Pengecekan Koneksi Server via Socket.io (Biasanya diinisialisasi di main.js, 
-        // tapi kita bisa pantau global socket atau berikan event callback)
+        // 2. Pengecekan Koneksi Server via Native WebSocket
         window.addEventListener("DOMContentLoaded", () => {
             preloadCardSprite();
 
-            // Kita buat fungsi penanda server siap yang bisa dipanggil dari main.js 
-            // ketika event 'connect' dari socket berhasil terhubung.
             window.notifyServerReady = function() {
                 serverConnected = true;
                 document.getElementById("loading-bar").style.width = "90%";
@@ -200,8 +197,7 @@
                 checkReadyToDismiss();
             };
 
-            // Fallback pengaman (jika dalam 8 detik socket lama merespons karena cold start, 
-            // kita buka paksa loading screen agar user tidak menunggu selamanya)
+            // Fallback pengaman jika koneksi membutuhkan waktu agak lama (cold start)
             setTimeout(() => {
                 if (!serverConnected) {
                     serverConnected = true;
