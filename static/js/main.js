@@ -104,7 +104,7 @@ function handleGameUpdate(state) {
     
     const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
     if (drawBtn) {
-        if (state.has_drawn || !state.is_my_turn) {
+        if (state.has_drawn || !state.is_my_turn || state.round_ending) {
             drawBtn.disabled = true;
             drawBtn.style.opacity = '0.5';
             drawBtn.style.cursor = 'not-allowed';
@@ -112,6 +112,22 @@ function handleGameUpdate(state) {
             drawBtn.disabled = false;
             drawBtn.style.opacity = '1';
             drawBtn.style.cursor = 'pointer';
+        }
+    }
+
+    // PENGATURAN TOMBOL SELESAI RONDE
+    const finishBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Selesai Ronde'));
+    if (finishBtn) {
+        if (state.round_ending) {
+            finishBtn.disabled = false;
+            finishBtn.style.opacity = '1';
+            finishBtn.style.cursor = 'pointer';
+            finishBtn.style.background = '#e67e22';
+        } else {
+            finishBtn.disabled = true;
+            finishBtn.style.opacity = '0.4';
+            finishBtn.style.cursor = 'not-allowed';
+            finishBtn.style.background = '#7f8c8d';
         }
     }
 
@@ -142,8 +158,12 @@ function handleGameUpdate(state) {
         const isMyTurn = state.is_my_turn;
         const myScore = state.my_score !== undefined ? state.my_score : 0;
         
-        document.getElementById('turn-indicator').innerText = 
-            (isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...") + ` | Skor Anda: ${myScore}`;
+        let statusText = isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...";
+        if (state.round_ending) {
+            statusText = "🛑 TAHAP AKHIR RONDE - Turunkan kartu lalu klik Selesai Ronde!";
+        }
+
+        document.getElementById('turn-indicator').innerText = statusText + ` | Skor Anda: ${myScore}`;
     }
 }
 
