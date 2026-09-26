@@ -2,142 +2,191 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Game Remi / Jauh Online</title>
     <!-- Jalur lokal statis -->
     <link rel="stylesheet" href="static/css/style.css">
+    <style>
+        /* CSS Tambahan untuk Memaksa Frame 1920x1080 Landscape di HP & Desktop */
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #090d16;
+            overflow: hidden;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        #game-viewport {
+            position: absolute;
+            width: 1920px;
+            height: 1080px;
+            top: 50%;
+            left: 50%;
+            transform-origin: center center;
+            overflow: hidden;
+        }
+    </style>
 </head>
 <body>
 
-    <!-- TOMBOL FULL SCREEN (Layar Penuh) -->
-    <button id="fullscreen-btn" onclick="toggleFullScreen()" style="position: fixed; top: 10px; right: 15px; z-index: 99999; padding: 6px 12px; background: #27ae60; color: white; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.3);">
-        🖥️ Layar Penuh
-    </button>
+    <!-- KONTAINER UTAMA BERUKURAN TETAP 1920x1080 YANG DISKALAKAN OTOMATIS -->
+    <div id="game-viewport">
 
-    <!-- LOADING SCREEN OVERLAY -->
-    <div id="loading-screen" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#0f172a; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#fff; font-family:'Segoe UI', Arial, sans-serif;">
-        <div style="font-size: 40px; margin-bottom: 15px;">🎴</div>
-        <h2 id="loading-title" style="color:#f1c40f; margin:0 0 10px 0;">Menghubungkan ke Server...</h2>
-        <p id="loading-desc" style="color:#94a3b8; font-size:14px; margin:0;">Membangunkan server dan menyiapkan meja permainan.</p>
-        <div style="width: 200px; height: 6px; background: #2a2a2a; border-radius: 3px; margin-top: 20px; overflow: hidden;">
-            <div id="loading-bar" style="width: 10%; height: 100%; background: #27ae60; transition: width 0.3s ease;"></div>
-        </div>
-    </div>
+        <!-- TOMBOL FULL SCREEN (Layar Penuh) -->
+        <button id="fullscreen-btn" onclick="toggleFullScreen()" style="position: fixed; top: 20px; right: 25px; z-index: 99999; padding: 12px 24px; background: #27ae60; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 18px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+            🖥️ Layar Penuh
+        </button>
 
-    <!-- LOBBY CONTAINER -->
-    <div id="lobby-container" class="panel">
-        <h1>🎴 Remi / Jauh Online</h1>
-        <div class="form-group">
-            <label>Nama Pemain:</label>
-            <input type="text" id="player-name" placeholder="Masukkan nama..." autocomplete="off" required>
+        <!-- LOADING SCREEN OVERLAY -->
+        <div id="loading-screen" style="position:fixed; top:0; left:0; width:1920px; height:1080px; background:#0f172a; z-index:99999; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#fff;">
+            <div style="font-size: 80px; margin-bottom: 20px;">🎴</div>
+            <h2 id="loading-title" style="color:#f1c40f; font-size:40px; margin:0 0 15px 0;">Menghubungkan ke Server...</h2>
+            <p id="loading-desc" style="color:#94a3b8; font-size:22px; margin:0;">Membangunkan server dan menyiapkan meja permainan.</p>
+            <div style="width: 400px; height: 12px; background: #2a2a2a; border-radius: 6px; margin-top: 30px; overflow: hidden;">
+                <div id="loading-bar" style="width: 10%; height: 100%; background: #27ae60; transition: width 0.3s ease;"></div>
+            </div>
         </div>
-        <div class="form-group">
-            <label>Jumlah Bot (isi slot kosong):</label>
-            <select id="bot-count-option">
-                <option value="0">0 Bot (Main Sendiri / Kosong)</option>
-                <option value="1">1 Bot</option>
-                <option value="2">2 Bot</option>
-                <option value="3" selected>3 Bot (Full Meja 4 Pemain)</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>Opsi Joker:</label>
-            <select id="joker-option">
-                <option value="0">Tanpa Joker</option>
-                <option value="1">1 Joker</option>
-                <option value="2">2 Joker</option>
-            </select>
-        </div>
-        <div class="form-group">
-            <label>
-                <input type="checkbox" id="is-spectator"> Masuk sebagai Penonton (Spectator)
-            </label>
-        </div>
-        <div class="button-group">
-            <button onclick="createLobby()">Buat Lobby</button>
-            <button onclick="joinLobby()">Gabung Lobby</button>
-        </div>
-        <input type="text" id="room-code-input" placeholder="Kode Room (untuk gabung)" autocomplete="off">
-        
-        <div id="lobby-room-info" style="display:none; margin-top: 15px;">
-            <h3>Kode Room: <span id="display-room-code"></span></h3>
-            <h4>Daftar Pemain dalam Lobby:</h4>
-            <ul id="player-list"></ul>
-            <button id="start-btn" style="display:none;" onclick="startGame()">Mulai Permainan</button>
-        </div>
-    </div>
 
-    <!-- GAME TABLE CONTAINER -->
-    <div id="game-container" style="display:none;">
-        <div class="poker-table">
+        <!-- LOBBY CONTAINER -->
+        <div id="lobby-container" class="panel" style="width: 700px; margin: 150px auto; padding: 40px; background: #1e293b; border-radius: 16px; color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <h1 style="text-align: center; font-size: 42px; margin-top: 0; color: #f1c40f;">🎴 Remi / Jauh Online</h1>
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 18px; margin-bottom: 8px;">Nama Pemain:</label>
+                <input type="text" id="player-name" placeholder="Masukkan nama..." autocomplete="off" required style="width: 100%; padding: 14px; font-size: 18px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff;">
+            </div>
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 18px; margin-bottom: 8px;">Jumlah Bot (isi slot kosong):</label>
+                <select id="bot-count-option" style="width: 100%; padding: 14px; font-size: 18px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff;">
+                    <option value="0">0 Bot (Main Sendiri / Kosong)</option>
+                    <option value="1">1 Bot</option>
+                    <option value="2">2 Bot</option>
+                    <option value="3" selected>3 Bot (Full Meja 4 Pemain)</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 20px;">
+                <label style="display: block; font-size: 18px; margin-bottom: 8px;">Opsi Joker:</label>
+                <select id="joker-option" style="width: 100%; padding: 14px; font-size: 18px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff;">
+                    <option value="0">Tanpa Joker</option>
+                    <option value="1">1 Joker</option>
+                    <option value="2">2 Joker</option>
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 25px; font-size: 18px;">
+                <label>
+                    <input type="checkbox" id="is-spectator" style="transform: scale(1.3); margin-right: 10px;"> Masuk sebagai Penonton (Spectator)
+                </label>
+            </div>
+            <div class="button-group" style="display: flex; gap: 15px; margin-bottom: 20px;">
+                <button onclick="createLobby()" style="flex: 1; padding: 14px; font-size: 18px; background: #27ae60; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Buat Lobby</button>
+                <button onclick="joinLobby()" style="flex: 1; padding: 14px; font-size: 18px; background: #2980b9; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Gabung Lobby</button>
+            </div>
+            <input type="text" id="room-code-input" placeholder="Kode Room (untuk gabung)" autocomplete="off" style="width: 100%; padding: 14px; font-size: 18px; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff;">
             
-            <!-- AREA LAWAN ATAS -->
-            <div id="opponent-top" class="opponent-slot top-slot"></div>
-
-            <!-- AREA MIDDLE -->
-            <div class="middle-layout">
-                <div id="opponent-left" class="opponent-slot side-slot"></div>
-                <div class="center-table">
-                    <div class="deck-stack" onclick="drawCard('deck')">
-                        <div class="card-back"></div>
-                        <span id="deck-count">Sisa: 0</span>
-                    </div>
-                    <div class="discard-area">
-                        <div class="discard-title">KARTU TERBUKA DI MEJA</div>
-                        <div id="discard-pile" class="card-stack-horizontal"></div>
-                    </div>
-                </div>
-                <div id="opponent-right" class="opponent-slot side-slot"></div>
-            </div>
-
-            <!-- AREA PLAYER BAWAH -->
-            <div class="player-bottom">
-                <div class="player-header">
-                    <h3>Kartu Anda (<span id="turn-indicator"></span>)</h3>
-                </div>
-                <div id="my-hand" class="card-row"></div>
-                <div class="action-buttons">
-                    <button onclick="drawCard('deck')">Cangkul 1 Kartu</button>
-                    <button onclick="laySeries()">Turunkan Seri</button>
-                    <button onclick="layPatahan()">Turunkan Patahan</button>
-                    <button onclick="sortHand()">⚡ Susun Kartu (Auto)</button>
-                    <button onclick="discardSelectedCard(false)">Buang Kartu</button>
-                    <button onclick="discardSelectedCard(true)" class="btn-win">Tutup (Menang)</button>
-                </div>
-                <div class="melds-container" style="margin-top: 10px;">
-                    <div class="melds-title">SERI & PATAHAN ANDA</div>
-                    <div id="my-melds" class="melds-row"></div>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <!-- MODAL SCORE SUMMARY -->
-    <div id="score-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
-        <div style="background:#1e1e1e; padding:25px; border-radius:12px; width:90%; max-width:550px; text-align:center; box-shadow:0 0 25px #27ae60;">
-            <h2 id="modal-title" style="color:#f1c40f; margin-top:0;">📋 HASIL RONDE</h2>
-            <table style="width:100%; color:#fff; border-collapse:collapse; margin:15px 0; font-size:13px;">
-                <thead>
-                    <tr style="border-bottom:2px solid #444; color:#a0aec0;">
-                        <th style="padding:8px; text-align:left;">Pemain</th>
-                        <th style="padding:8px;">Turun</th>
-                        <th style="padding:8px;">Tangan</th>
-                        <th style="padding:8px;">Tutup</th>
-                        <th style="padding:8px;">Ronde</th>
-                        <th style="padding:8px; color:#2ecc71;">TOTAL</th>
-                    </tr>
-                </thead>
-                <tbody id="modal-score-body"></tbody>
-            </table>
-            <div style="font-size:14px; color:#e2e8f0; margin-top:10px;">
-                <span id="countdown-timer" style="color:#e74c3c; font-weight:bold; font-size:16px;">5</span> detik lagi ronde berikutnya dimulai...
+            <div id="lobby-room-info" style="display:none; margin-top: 25px; border-top: 1px solid #475569; padding-top: 20px;">
+                <h3 style="font-size: 22px;">Kode Room: <span id="display-room-code" style="color: #f1c40f;"></span></h3>
+                <h4 style="font-size: 18px;">Daftar Pemain dalam Lobby:</h4>
+                <ul id="player-list" style="font-size: 18px; margin-bottom: 20px;"></ul>
+                <button id="start-btn" style="display:none; width: 100%; padding: 16px; font-size: 20px; background: #e67e22; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;" onclick="startGame()">Mulai Permainan</button>
             </div>
         </div>
+
+        <!-- GAME TABLE CONTAINER -->
+        <div id="game-container" style="display:none; width: 1920px; height: 1080px; position: relative;">
+            <div class="poker-table" style="width: 100%; height: 100%; position: relative;">
+                
+                <!-- AREA LAWAN ATAS -->
+                <div id="opponent-top" class="opponent-slot top-slot"></div>
+
+                <!-- AREA MIDDLE -->
+                <div class="middle-layout">
+                    <div id="opponent-left" class="opponent-slot side-slot"></div>
+                    <div class="center-table">
+                        <div class="deck-stack" onclick="drawCard('deck')">
+                            <div class="card-back"></div>
+                            <span id="deck-count">Sisa: 0</span>
+                        </div>
+                        <div class="discard-area">
+                            <div class="discard-title">KARTU TERBUKA DI MEJA</div>
+                            <div id="discard-pile" class="card-stack-horizontal"></div>
+                        </div>
+                    </div>
+                    <div id="opponent-right" class="opponent-slot side-slot"></div>
+                </div>
+
+                <!-- AREA PLAYER BAWAH -->
+                <div class="player-bottom">
+                    <div class="player-header">
+                        <h3>Kartu Anda (<span id="turn-indicator"></span>)</h3>
+                    </div>
+                    <div id="my-hand" class="card-row"></div>
+                    <div class="action-buttons">
+                        <button onclick="drawCard('deck')">Cangkul 1 Kartu</button>
+                        <button onclick="laySeries()">Turunkan Seri</button>
+                        <button onclick="layPatahan()">Turunkan Patahan</button>
+                        <button onclick="sortHand()">⚡ Susun Kartu (Auto)</button>
+                        <button onclick="discardSelectedCard(false)">Buang Kartu</button>
+                        <button onclick="discardSelectedCard(true)" class="btn-win">Tutup (Menang)</button>
+                    </div>
+                    <div class="melds-container" style="margin-top: 10px;">
+                        <div class="melds-title">SERI & PATAHAN ANDA</div>
+                        <div id="my-melds" class="melds-row"></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- MODAL SCORE SUMMARY -->
+        <div id="score-modal" style="display:none; position:fixed; top:0; left:0; width:1920px; height:1080px; background:rgba(0,0,0,0.85); z-index:9999; justify-content:center; align-items:center;">
+            <div style="background:#1e1e1e; padding:35px; border-radius:16px; width:700px; text-align:center; box-shadow:0 0 35px #27ae60; color: #fff;">
+                <h2 id="modal-title" style="color:#f1c40f; font-size:28px; margin-top:0;">📋 HASIL RONDE</h2>
+                <table style="width:100%; color:#fff; border-collapse:collapse; margin:20px 0; font-size:16px;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #444; color:#a0aec0;">
+                            <th style="padding:12px; text-align:left;">Pemain</th>
+                            <th style="padding:12px;">Turun</th>
+                            <th style="padding:12px;">Tangan</th>
+                            <th style="padding:12px;">Tutup</th>
+                            <th style="padding:12px;">Ronde</th>
+                            <th style="padding:12px; color:#2ecc71;">TOTAL</th>
+                        </tr>
+                    </thead>
+                    <tbody id="modal-score-body"></tbody>
+                </table>
+                <div style="font-size:18px; color:#e2e8f0; margin-top:15px;">
+                    <span id="countdown-timer" style="color:#e74c3c; font-weight:bold; font-size:20px;">5</span> detik lagi ronde berikutnya dimulai...
+                </div>
+            </div>
+        </div>
+
     </div>
 
-    <!-- SCRIPT UTAMA: LOADING GABUNGAN ASET + KONEKSI SERVER -->
+    <!-- SCRIPT SKALA RESOLUSI OTOMATIS (1920x1080 Auto-Fit Landscape) -->
     <script>
+        function resizeGameViewport() {
+            const viewport = document.getElementById('game-viewport');
+            const targetWidth = 1920;
+            const targetHeight = 1080;
+            
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            // Hitung skala rasio agar pas di layar device apa pun
+            const scaleX = windowWidth / targetWidth;
+            const scaleY = windowHeight / targetHeight;
+            const scale = Math.min(scaleX, scaleY);
+            
+            viewport.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        }
+
+        window.addEventListener('resize', resizeGameViewport);
+        window.addEventListener('DOMContentLoaded', resizeGameViewport);
+
         function toggleFullScreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(err => {
@@ -168,7 +217,6 @@
             }
         }
 
-        // 1. Pengecekan Aset Kartu
         function preloadCardSprite() {
             const img = new Image();
             img.src = "static/images/card_sprite.png";
@@ -185,7 +233,6 @@
             };
         }
 
-        // 2. Pengecekan Koneksi Server via Native WebSocket
         window.addEventListener("DOMContentLoaded", () => {
             preloadCardSprite();
 
@@ -197,7 +244,6 @@
                 checkReadyToDismiss();
             };
 
-            // Fallback pengaman jika koneksi membutuhkan waktu agak lama (cold start)
             setTimeout(() => {
                 if (!serverConnected) {
                     serverConnected = true;
