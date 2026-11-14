@@ -103,11 +103,11 @@ ws.onmessage = (event) => {
     } 
     else if (data.type === 'game_update') {
         if (lastDeckCount !== null && data.deck_count < lastDeckCount) {
-            triggerFlyingCardAnimation(data.current_turn_player_id);
+            // Kirim ID player yang sedang giliran / cangkul ke fungsi animasi
+            triggerFlyingCardAnimation(data.current_turn_player_id, data.opponents || data.players);
         }
         lastDeckCount = data.deck_count;
 
-        // Beri delay di mode penonton/bot agar gerakan terlihat natural dan tidak terlalu cepat
         const renderDelay = document.getElementById('is-spectator')?.checked ? 400 : 0;
         setTimeout(() => {
             handleGameUpdate(data);
@@ -125,20 +125,38 @@ ws.onmessage = (event) => {
 };
 
 /* =========================================================
-   ANIMASI FLYING CARD (MENUJU SLOT PEMAIN YANG BERAKSI)
+   ANIMASI FLYING CARD (TARGET SESUAI POSISI PEMAIN / BOT)
    ========================================================= */
-function triggerFlyingCardAnimation(activePlayerId) {
+function triggerFlyingCardAnimation(activePlayerId, playersList) {
     playSound('draw');
     
     const deckSource = document.querySelector('.deck-stack') || document.body;
-    let targetContainer = document.getElementById('my-hand'); // Default ke bawah (kita)
+    let targetContainer = document.getElementById('my-hand'); // Default ke player utama (bawah)
 
+    // Jika ada info player aktif, tentukan apakah itu kita atau bot di sudut
     if (activePlayerId) {
-        // Cari elemen slot aktif berdasarkan giliran player
-        const slots = ['opponent-left', 'opponent-top', 'opponent-right'];
-        const availableSlots = slots.map(id => document.getElementById(id)).filter(el => el && el.children.length > 0);
-        if (availableSlots.length > 0) {
-            targetContainer = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+        // Cek apakah activePlayerId milik salah satu lawan di slot (kiri, atas, kanan)
+        const slotMapping = {
+            'opponent-left': 0,
+            'opponent-top': 1,
+            'opponent-right': 2
+        };
+
+        // Jika playersList tersedia, cari indeks lawan
+        if (playersList && Array.isArray(playersList)) {
+            const opponentIndex = playersList.findIndex(op => op.id === activePlayerId);
+            const slotIds = ['opponent-left', 'opponent-top', 'opponent-right'];
+            if (opponentIndex !== -1 && slotIds[opponentIndex]) {
+                const foundSlot = document.getElementById(slotIds[opponentIndex]);
+                if (foundSlot) targetContainer = foundSlot;
+            }
+        } else {
+            // Fallback: Jika tidak terdeteksi presisi, ambil slot acak lawan yang terisi
+            const slots = ['opponent-left', 'opponent-top', 'opponent-right'];
+            const availableSlots = slots.map(id => document.getElementById(id)).filter(el => el && el.children.length > 0);
+            if (availableSlots.length > 0) {
+                targetContainer = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+            }
         }
     }
     
