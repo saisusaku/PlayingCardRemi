@@ -106,11 +106,9 @@ def get_card_score_value(card, meld_cards=None):
     if card['type'] != 'joker':
         return CARD_VALUES.get(card['rank'], 5)
     
-    # Jika kartu adalah joker dan berada di dalam meld (seri/patahan), nilai mengikuti kartu yang dibantu
     if meld_cards:
         normals = [c for c in meld_cards if c['type'] != 'joker']
         if normals:
-            # Ambil nilai dari kartu normal pertama dalam kelompok tersebut
             sample_rank = normals[0]['rank']
             return CARD_VALUES.get(sample_rank, 5)
     return 5
@@ -164,7 +162,6 @@ class RemiGameState:
         self.starter_must_discard = False
         self.admin_sid = None
         
-        # State Akhir Ronde
         self.round_ending = False
         self.pending_winner_sid = None
         self.pending_tutupan_card = None
@@ -322,7 +319,6 @@ class RemiGameState:
 
         has_joker = any(c['type'] == 'joker' for c in selected_cards)
         if has_joker:
-            # Jika sedang di akhir ronde karena cangkulan habis, joker boleh membantu. Jika karena tutup, tidak boleh.
             if self.round_ending and not self.joker_allowed_in_melds:
                 return False, "Kartu Joker tidak bisa membantu saat ada pemain yang tutup!"
             
@@ -396,12 +392,11 @@ class RemiGameState:
 
         p['hand'] = [c for c in p['hand'] if c['id'] != card['id']]
 
-        # Masuk ke State Akhir Ronde (Round Ending) alih-alih langsung menghitung skor
         if is_tutupan or len(p['hand']) == 0:
             self.round_ending = True
             self.pending_winner_sid = sid
             self.pending_tutupan_card = card
-            self.joker_allowed_in_melds = False  # Saat tutup, joker tidak bisa membantu pemain lain
+            self.joker_allowed_in_melds = False
             return True, "Pemain Tutup! Silakan turunkan sisa kartu Anda ke meja.", False, None
 
         self.discard_pile.append(card)
@@ -410,7 +405,7 @@ class RemiGameState:
             self.round_ending = True
             self.pending_winner_sid = None
             self.pending_tutupan_card = None
-            self.joker_allowed_in_melds = True  # Saat cangkulan habis, joker bisa membantu
+            self.joker_allowed_in_melds = True
             return True, "Cangkulan Habis! Silakan turunkan sisa kartu Anda ke meja.", False, None
 
         self.starter_must_discard = False
@@ -418,11 +413,9 @@ class RemiGameState:
         return True, "Kartu dibuang.", False, None
 
     def finish_round_scoring(self):
-        """Dipanggil setelah pemain selesai menurunkan kartu di state akhir ronde"""
         winner_sid = self.pending_winner_sid
         tutupan_card = self.pending_tutupan_card
         
-        # Proses sisa tangan pemain lain/semua pemain untuk menurunkan kombinasi yang valid
         for sid in self.player_order:
             if winner_sid and sid == winner_sid:
                 continue
@@ -430,7 +423,6 @@ class RemiGameState:
             p = self.players[sid]
             allow_joker = self.joker_allowed_in_melds
 
-            # 1. Cek Seri dari tangan
             changed = True
             while changed:
                 changed = False
@@ -452,7 +444,6 @@ class RemiGameState:
                         changed = True
                         break
 
-            # 2. Cek Patahan dari tangan
             changed_patahan = True
             while changed_patahan:
                 changed_patahan = False
@@ -520,5 +511,7 @@ class RemiGameState:
         self.highest_scorer_prev = highest_player['sid']
         self.first_round = False
         
-        game_ended = any(p['score'] >= 500 for p in self.players.values() if not p['is_spectator'])
+        # MENGGABUNGKAN RULE ASLI (>= 500) DAN RULE TAMBAHAN (<= -500)
+        game_ended = any(p['score'] >= 500 or p['score'] <= -500 for p in self.players.values() if not p['is_spectator'])
+        
         return score_details, game_ended
