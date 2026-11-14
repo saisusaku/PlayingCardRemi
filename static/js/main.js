@@ -6,6 +6,54 @@ let currentRoom = null;
 let selectedCards = [];
 let myHandCards = []; 
 let draggedIndex = null;
+let lastDeckCount = null;
+
+/* =========================================================
+   SYSTEM SOUND EFFECT (AUDIO SYNTHESIZER ALA GAME KASUAL)
+   ========================================================= */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(type) {
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+    }
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+
+    if (type === 'click') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.08);
+        gainNode.gain.setValueAtTime(0.15, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+        osc.start(now);
+        osc.stop(now + 0.08);
+    } else if (type === 'draw') {
+        // Suara gesekan kartu / ambil kartu
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(250, now);
+        osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+        gainNode.gain.setValueAtTime(0.2, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    } else if (type === 'success' || type === 'score') {
+        // Nada ceria ala Candy Crush saat sukses susun seri/patahan
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, now); // C5
+        osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+        osc.frequency.setValueAtTime(783.99, now + 0.16); // G5
+        gainNode.gain.setValueAtTime(0.25, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+        osc.start(now);
+        osc.stop(now + 0.35);
+    }
+}
 
 ws.onopen = () => {
     console.log("[WS] Terhubung langsung secara kilat ke server!");
@@ -26,11 +74,13 @@ ws.onmessage = (event) => {
         document.getElementById('display-room-code').innerText = currentRoom;
         document.getElementById('lobby-room-info').style.display = 'block';
         if(data.is_admin) document.getElementById('start-btn').style.display = 'block';
+        playSound('click');
     } 
     else if (data.type === 'room_joined') {
         currentRoom = data.room_code;
         document.getElementById('display-room-code').innerText = currentRoom;
         document.getElementById('lobby-room-info').style.display = 'block';
+        playSound('click');
     } 
     else if (data.type === 'update_lobby') {
         const list = document.getElementById('player-list');
@@ -42,6 +92,11 @@ ws.onmessage = (event) => {
         });
     } 
     else if (data.type === 'game_update') {
+        // Cek apakah terjadi aksi cangkul (jumlah deck berkurang) untuk mentrigger animasi terbang ke tangan player
+        if (lastDeckCount !== null && data.deck_count < lastDeckCount) {
+            triggerFlyingCardAnimation('deck-source-element', 'my-hand');
+        }
+        lastDeckCount = data.deck_count;
         handleGameUpdate(data);
     } 
     else if (data.type === 'error_msg') {
@@ -50,11 +105,44 @@ ws.onmessage = (event) => {
         renderHandUI();
     } 
     else if (data.type === 'round_summary') {
+        playSound('success');
         handleRoundSummary(data);
     }
 };
 
+/* =========================================================
+   ANIMASI FLYING CARD DARI CANGKULAN KE TANGAN PLAYER
+   ========================================================= */
+function triggerFlyingCardAnimation(sourceId, targetId) {
+    playSound('draw');
+    const targetContainer = document.getElementById(targetId);
+    const deckSource = document.querySelector('.deck-stack') || document.body;
+    
+    if (!targetContainer) return;
+
+    const startRect = deckSource.getBoundingClientRect();
+    const targetRect = targetContainer.getBoundingClientRect();
+
+    const flyer = document.createElement('div');
+    flyer.className = 'flying-card-clone';
+    flyer.style.left = `${startRect.left}px`;
+    flyer.style.top = `${startRect.top}px`;
+    document.body.appendChild(flyer);
+
+    requestAnimationFrame(() => {
+        flyer.style.left = `${targetRect.left + (targetRect.width / 2)}px`;
+        flyer.style.top = `${targetRect.top}px`;
+        flyer.style.transform = 'scale(0.4) rotate(15deg)';
+        flyer.style.opacity = '0.3';
+    });
+
+    setTimeout(() => {
+        flyer.remove();
+    }, 500);
+}
+
 function createLobby() {
+    playSound('click');
     const name = document.getElementById('player-name').value;
     const joker = document.getElementById('joker-option').value;
     const botCount = document.getElementById('bot-count-option').value;
@@ -71,6 +159,7 @@ function createLobby() {
 }
 
 function joinLobby() {
+    playSound('click');
     const name = document.getElementById('player-name').value;
     const room = document.getElementById('room-code-input').value;
     const isSpec = document.getElementById('is-spectator').checked;
@@ -85,6 +174,7 @@ function joinLobby() {
 }
 
 function startGame() {
+    playSound('click');
     ws.send(JSON.stringify({
         action: 'start_game',
         room_code: currentRoom
@@ -92,6 +182,7 @@ function startGame() {
 }
 
 function finishRound() {
+    playSound('click');
     ws.send(JSON.stringify({
         action: 'finish_round',
         room_code: currentRoom
@@ -103,6 +194,7 @@ function handleGameUpdate(state) {
     document.getElementById('game-container').style.display = 'block';
     
     document.getElementById('deck-count').innerText = `Sisa: ${state.deck_count}`;
+    if (lastDeckCount === null) lastDeckCount = state.deck_count;
     
     const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
     if (drawBtn) {
@@ -142,11 +234,8 @@ function handleGameUpdate(state) {
             if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
             
             cardEl.onclick = () => {
-                // Beri animasi pengambilan kartu (collect) dari meja
-                cardEl.classList.add('anim-collect-card');
-                setTimeout(() => {
-                    drawCard('discard', card.id);
-                }, 300);
+                playSound('click');
+                drawCard('discard', card.id);
             };
 
             discardDiv.appendChild(cardEl);
@@ -154,7 +243,17 @@ function handleGameUpdate(state) {
         discardDiv.scrollLeft = discardDiv.scrollWidth;
     }
 
-    renderOpponentsPositions(state.opponents || state.players || []);
+    renderOpponentsPositions(state.opponents || state.players || [], state.current_turn_player_id);
+
+    // Indikator Glowing Edge pada area bawah (Player Sendiri) jika gilirannya
+    const playerBottomArea = document.querySelector('.player-bottom');
+    if (playerBottomArea) {
+        if (state.is_my_turn) {
+            playerBottomArea.classList.add('active-turn-glow');
+        } else {
+            playerBottomArea.classList.remove('active-turn-glow');
+        }
+    }
 
     if (state.hand !== undefined) {
         syncAndRenderHand(state.hand);
@@ -163,16 +262,16 @@ function handleGameUpdate(state) {
         const isMyTurn = state.is_my_turn;
         const myScore = state.my_score !== undefined ? state.my_score : 0;
         
-        let statusText = isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...";
+        let statusText = isMyTurn ? "✨ Giliran Anda!" : "⏳ Menunggu Giliran Lawan...";
         if (state.round_ending) {
-            statusText = "⚠️ TAHAP AKHIR RONDE - Turunkan kartu lalu klik Selesai Ronde!";
+            statusText = "🔥 TAHAP AKHIR RONDE - Turunkan kartu lalu klik Selesai Ronde!";
         }
 
         document.getElementById('turn-indicator').innerText = statusText + ` | Skor Anda: ${myScore}`;
     }
 }
 
-function renderOpponentsPositions(opponents) {
+function renderOpponentsPositions(opponents, currentTurnPlayerId) {
     const topSlot = document.getElementById('opponent-top');
     const leftSlot = document.getElementById('opponent-left');
     const rightSlot = document.getElementById('opponent-right');
@@ -185,16 +284,24 @@ function renderOpponentsPositions(opponents) {
 
     opponents.forEach((op, index) => {
         if (index < slots.length) {
-            const opCard = createOpponentCardElement(op);
+            const opCard = createOpponentCardElement(op, op.id === currentTurnPlayerId);
             slots[index].appendChild(opCard);
         }
     });
 }
 
-function createOpponentCardElement(op) {
+function createOpponentCardElement(op, isTurn) {
     const opDiv = document.createElement('div');
     opDiv.className = 'opponent-card';
-    opDiv.innerHTML = `<strong>${op.name}</strong><br><small>Tangan: ${op.hand_count || 0} | Skor: ${op.score}</small>`;
+    
+    // Berikan Glowing Edge pada kartu lawan jika sedang gilirannya
+    if (isTurn) {
+        opDiv.classList.add('active-turn-glow');
+    } else {
+        opDiv.classList.remove('active-turn-glow');
+    }
+
+    opDiv.innerHTML = `<strong>${op.name}</strong> ${isTurn ? '⭐' : ''}<br><small>Tangan: ${op.hand_count || 0} | Skor: ${op.score}</small>`;
 
     const meldsDiv = document.createElement('div');
     meldsDiv.className = 'melds-row';
@@ -281,7 +388,10 @@ function renderHandUI() {
             cardEl.classList.add('selected');
         }
 
-        cardEl.onclick = () => toggleSelectCard(card.id, cardEl);
+        cardEl.onclick = () => {
+            playSound('click');
+            toggleSelectCard(card.id, cardEl);
+        };
 
         cardEl.addEventListener('dragstart', handleDragStart);
         cardEl.addEventListener('dragover', handleDragOver);
@@ -330,6 +440,7 @@ function toggleSelectCard(cardId, element) {
 }
 
 function drawCard(source, cardId=null) {
+    playSound('click');
     if (source === 'deck') {
         ws.send(JSON.stringify({
             action: 'draw_card',
@@ -350,35 +461,27 @@ function drawCard(source, cardId=null) {
     }
 }
 
-// Fungsi pembantu untuk memicu efek kilat & zoom maju ke depan layar sebelum ke Seri/Patahan
+/* =========================================================
+   EFEK FLASH & ZOOM SEBELUM KARTU DITURUNKAN (SERI / PATAHAN)
+   ========================================================= */
 function triggerFlashAndZoomEffect(cardIds, callback) {
-    const handDiv = document.getElementById('my-hand');
-    const cardElements = Array.from(handDiv.children).filter(el => {
-        // Cari elemen kartu yang sesuai dengan ID kartu yang dipilih
-        const matchCard = myHandCards[el.dataset.index];
-        return matchCard && cardIds.includes(matchCard.id);
+    playSound('success');
+    cardIds.forEach(id => {
+        const cardEls = document.querySelectorAll('.card-sprite');
+        cardEls.forEach(el => {
+            // Berikan animasi flash/zoom ke kartu yang dipilih
+            el.classList.add('anim-flash-zoom');
+        });
     });
 
-    if (cardElements.length === 0) {
-        if (typeof callback === 'function') callback();
-        return;
-    }
-
-    cardElements.forEach(el => el.classList.add('anim-flash-zoom'));
-
-    // Tunggu durasi animasi selesai (0.7s) sebelum melanjutkan aksi kirim ke server
     setTimeout(() => {
-        cardElements.forEach(el => el.classList.remove('anim-flash-zoom'));
-        if (typeof callback === 'function') {
-            callback();
-        }
-    }, 700);
+        if (typeof callback === 'function') callback();
+    }, 650);
 }
 
 function laySeries() {
     if(selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Seri!");
     
-    // Terapkan animasi kilatan & zoom ke depan layar terlebih dahulu
     triggerFlashAndZoomEffect(selectedCards, () => {
         ws.send(JSON.stringify({
             action: 'lay_series',
@@ -393,7 +496,6 @@ function laySeries() {
 function layPatahan() {
     if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
     
-    // Terapkan animasi kilatan & zoom ke depan layar terlebih dahulu
     triggerFlashAndZoomEffect(selectedCards, () => {
         ws.send(JSON.stringify({
             action: 'lay_patahan',
@@ -409,6 +511,7 @@ function discardSelectedCard(isTutupan) {
     if (selectedCards.length === 0) {
         return alert("Pilih 1 kartu untuk dibuang!");
     }
+    playSound('click');
     
     const cardToDiscard = selectedCards[selectedCards.length - 1];
     
@@ -424,6 +527,7 @@ function discardSelectedCard(isTutupan) {
 }
 
 function sortHand() {
+    playSound('click');
     const rankOrder = {'2':2, '3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13, 'A':14, 'JOKER':99};
     const suitOrder = {'clubs':1, 'spades':2, 'hearts':3, 'diamonds':4, 'joker':5};
 
@@ -467,7 +571,7 @@ function handleRoundSummary(data) {
     if(data.game_ended) {
         title.innerText = "🏆 PERMAINAN SELESAI (MEMENANGKAN 500 PTS)!";
     } else {
-        title.innerText = "📊 HASIL RONDE & PERHITUNGAN SKOR";
+        title.innerText = "🎯 HASIL RONDE & PERHITUNGAN SKOR";
     }
 
     data.details.forEach(d => {
