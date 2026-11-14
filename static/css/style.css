@@ -195,7 +195,7 @@ button:hover { background: #219150; }
     min-height: 105px;
 }
 
-/* ANIMASI KARTU EKSISTING */
+/* ANIMASI KARTU */
 @keyframes drawCardAnim {
     0% { transform: translateY(-80px) scale(0.6); opacity: 0; }
     100% { transform: translateY(0) scale(1); opacity: 1; }
@@ -210,7 +210,7 @@ button:hover { background: #219150; }
 .card-sprite.anim-discard { animation: discardCardAnim 0.25s ease-out; }
 
 /* =========================================================
-   TAMBAHAN ANIMASI BARU & GLOWING EDGE (GILIRAN JALAN)
+   TAMBAHAN ANIMASI & GLOWING EDGE (GILIRAN / JUICY)
    ========================================================= */
 
 @keyframes edgeGlowPulse {
@@ -247,55 +247,11 @@ button:hover { background: #219150; }
     transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@keyframes drawCardFly {
-    0% {
-        transform: translate(-150px, -120px) scale(0.5);
-        opacity: 0;
-    }
-    100% {
-        transform: translate(0, 0) scale(1);
-        opacity: 1;
-    }
-}
-
-@keyframes collectCardFly {
-    0% {
-        transform: translate(0, 0) scale(1);
-        opacity: 1;
-    }
-    100% {
-        transform: translate(120px, 140px) scale(0.3);
-        opacity: 0;
-    }
-}
-
 @keyframes flashAndZoom {
-    0% {
-        transform: scale(1);
-        filter: brightness(1);
-    }
-    30% {
-        transform: scale(1.4) translateY(-35px);
-        filter: brightness(2.2) drop-shadow(0 0 25px #f1c40f);
-        z-index: 9999;
-    }
-    70% {
-        transform: scale(1.4) translateY(-35px);
-        filter: brightness(2) drop-shadow(0 0 30px #ffffff);
-        z-index: 9999;
-    }
-    100% {
-        transform: scale(1) translateY(0);
-        filter: brightness(1);
-    }
-}
-
-.card-sprite.anim-draw-card {
-    animation: drawCardFly 0.4s ease-out forwards;
-}
-
-.card-sprite.anim-collect-card {
-    animation: collectCardFly 0.5s ease-in forwards;
+    0% { transform: scale(1); filter: brightness(1); }
+    30% { transform: scale(1.4) translateY(-35px); filter: brightness(2.2) drop-shadow(0 0 25px #f1c40f); z-index: 9999; }
+    70% { transform: scale(1.4) translateY(-35px); filter: brightness(2) drop-shadow(0 0 30px #ffffff); z-index: 9999; }
+    100% { transform: scale(1) translateY(0); filter: brightness(1); }
 }
 
 .card-sprite.anim-flash-zoom {
