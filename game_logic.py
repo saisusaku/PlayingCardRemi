@@ -511,7 +511,7 @@ class RemiGameState:
         self.highest_scorer_prev = highest_player['sid']
         self.first_round = False
         
-        # MENGGABUNGKAN RULE ASLI (>= 500) DAN RULE TAMBAHAN (<= -500)
+        # Game selesai jika ada yang mencapai >= 500 (menang) atau <= -500 (kalah)
         game_ended = any(p['score'] >= 500 or p['score'] <= -500 for p in self.players.values() if not p['is_spectator'])
         
         return score_details, game_ended
