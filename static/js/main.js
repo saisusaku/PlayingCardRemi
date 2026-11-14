@@ -46,7 +46,6 @@ ws.onmessage = (event) => {
     } 
     else if (data.type === 'error_msg') {
         alert(data.message);
-        // RESET PILIHAN KARTU KETIKA TERJADI ERROR AGAR TIDAK DESYNC
         selectedCards = [];
         renderHandUI();
     } 
@@ -118,7 +117,6 @@ function handleGameUpdate(state) {
         }
     }
 
-    // PENGATURAN TOMBOL SELESAI RONDE
     const finishBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Selesai Ronde'));
     if (finishBtn) {
         if (state.round_ending) {
@@ -144,7 +142,11 @@ function handleGameUpdate(state) {
             if (idx === state.table_cards.length - 1) cardEl.classList.add('top-card');
             
             cardEl.onclick = () => {
-                drawCard('discard', card.id);
+                // Beri animasi pengambilan kartu (collect) dari meja
+                cardEl.classList.add('anim-collect-card');
+                setTimeout(() => {
+                    drawCard('discard', card.id);
+                }, 300);
             };
 
             discardDiv.appendChild(cardEl);
@@ -163,7 +165,7 @@ function handleGameUpdate(state) {
         
         let statusText = isMyTurn ? "Giliran Anda!" : "Menunggu Giliran Bot...";
         if (state.round_ending) {
-            statusText = "🛑 TAHAP AKHIR RONDE - Turunkan kartu lalu klik Selesai Ronde!";
+            statusText = "⚠️ TAHAP AKHIR RONDE - Turunkan kartu lalu klik Selesai Ronde!";
         }
 
         document.getElementById('turn-indicator').innerText = statusText + ` | Skor Anda: ${myScore}`;
@@ -348,26 +350,59 @@ function drawCard(source, cardId=null) {
     }
 }
 
+// Fungsi pembantu untuk memicu efek kilat & zoom maju ke depan layar sebelum ke Seri/Patahan
+function triggerFlashAndZoomEffect(cardIds, callback) {
+    const handDiv = document.getElementById('my-hand');
+    const cardElements = Array.from(handDiv.children).filter(el => {
+        // Cari elemen kartu yang sesuai dengan ID kartu yang dipilih
+        const matchCard = myHandCards[el.dataset.index];
+        return matchCard && cardIds.includes(matchCard.id);
+    });
+
+    if (cardElements.length === 0) {
+        if (typeof callback === 'function') callback();
+        return;
+    }
+
+    cardElements.forEach(el => el.classList.add('anim-flash-zoom'));
+
+    // Tunggu durasi animasi selesai (0.7s) sebelum melanjutkan aksi kirim ke server
+    setTimeout(() => {
+        cardElements.forEach(el => el.classList.remove('anim-flash-zoom'));
+        if (typeof callback === 'function') {
+            callback();
+        }
+    }, 700);
+}
+
 function laySeries() {
     if(selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Seri!");
-    ws.send(JSON.stringify({
-        action: 'lay_series',
-        room_code: currentRoom,
-        card_ids: selectedCards
-    }));
-    selectedCards = [];
-    renderHandUI();
+    
+    // Terapkan animasi kilatan & zoom ke depan layar terlebih dahulu
+    triggerFlashAndZoomEffect(selectedCards, () => {
+        ws.send(JSON.stringify({
+            action: 'lay_series',
+            room_code: currentRoom,
+            card_ids: selectedCards
+        }));
+        selectedCards = [];
+        renderHandUI();
+    });
 }
 
 function layPatahan() {
     if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
-    ws.send(JSON.stringify({
-        action: 'lay_patahan',
-        room_code: currentRoom,
-        card_ids: selectedCards
-    }));
-    selectedCards = [];
-    renderHandUI();
+    
+    // Terapkan animasi kilatan & zoom ke depan layar terlebih dahulu
+    triggerFlashAndZoomEffect(selectedCards, () => {
+        ws.send(JSON.stringify({
+            action: 'lay_patahan',
+            room_code: currentRoom,
+            card_ids: selectedCards
+        }));
+        selectedCards = [];
+        renderHandUI();
+    });
 }
 
 function discardSelectedCard(isTutupan) {
@@ -432,7 +467,7 @@ function handleRoundSummary(data) {
     if(data.game_ended) {
         title.innerText = "🏆 PERMAINAN SELESAI (MEMENANGKAN 500 PTS)!";
     } else {
-        title.innerText = "📋 HASIL RONDE & PERHITUNGAN SKOR";
+        title.innerText = "📊 HASIL RONDE & PERHITUNGAN SKOR";
     }
 
     data.details.forEach(d => {
