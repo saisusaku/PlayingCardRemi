@@ -7,6 +7,7 @@ let selectedCards = [];
 let myHandCards = []; 
 let draggedIndex = null;
 let lastDeckCount = null;
+let isProcessingUpdate = false; // Mencegah tumpang tindih render penonton
 
 /* =========================================================
    SYSTEM SOUND EFFECT (AUDIO SYNTHESIZER)
@@ -102,11 +103,18 @@ ws.onmessage = (event) => {
         }
     } 
     else if (data.type === 'game_update') {
+        // Cek cangkulan dan atur delay agar bot / penonton tidak terlalu cepat
         if (lastDeckCount !== null && data.deck_count < lastDeckCount) {
             triggerFlyingCardAnimation(data.current_turn_player_id);
         }
         lastDeckCount = data.deck_count;
-        handleGameUpdate(data);
+
+        // Berikan jeda waktu (throttle/delay) khusus untuk mode penonton atau bot agar gerakan terlihat mulus (tidak ngebut)
+        const renderDelay = document.getElementById('is-spectator')?.checked ? 400 : 0;
+        
+        setTimeout(() => {
+            handleGameUpdate(data);
+        }, renderDelay);
     } 
     else if (data.type === 'error_msg') {
         alert(data.message);
@@ -120,15 +128,23 @@ ws.onmessage = (event) => {
 };
 
 /* =========================================================
-   ANIMASI FLYING CARD
+   ANIMASI FLYING CARD (MENGARAH KE PLAYER / SLOT YANG TEPAT)
    ========================================================= */
-function triggerFlyingCardAnimation(targetPlayerId) {
+function triggerFlyingCardAnimation(activePlayerId) {
     playSound('draw');
     
-    // Tentukan target elemen berdasarkan giliran/player
-    let targetSelector = 'my-hand';
     const deckSource = document.querySelector('.deck-stack') || document.body;
-    const targetContainer = document.getElementById(targetSelector) || document.body;
+    let targetContainer = document.getElementById('my-hand'); // Default ke bawah (kita)
+
+    // Jika ada ID player aktif dan bukan kita, arahkan ke slot lawan (kiri, atas, atau kanan)
+    if (activePlayerId) {
+        const slots = ['opponent-left', 'opponent-top', 'opponent-right'];
+        // Pilih slot acak / urut dari slot lawan yang tersedia di meja
+        const availableSlots = slots.map(id => document.getElementById(id)).filter(el => el && el.children.length > 0);
+        if (availableSlots.length > 0) {
+            targetContainer = availableSlots[Math.floor(Math.random() * availableSlots.length)];
+        }
+    }
     
     if (!targetContainer || !deckSource) return;
 
@@ -560,6 +576,7 @@ function sortHand() {
 
 const CARD_X_OFFSETS = [
     12, 84, 158, 232, 304, 378, 452, 525, 600, 672, 747, 819, 894, 968
+.play
 ];
 
 const CARD_Y_OFFSETS = [
@@ -587,8 +604,25 @@ function handleRoundSummary(data) {
 
     tbody.innerHTML = '';
     
-    if(data.game_ended) {
-        title.innerText = "🏆 PERMAINAN SELESAI (MEMENANGKAN 500 PTS)!";
+    // RULE: Cek apakah ada pemain yang mencapai skor <= -500 atau game_ended dari server
+    let maxScore = -Infinity;
+    let winnerName = "";
+    let isGameOver = data.game_ended || false;
+
+    data.details.forEach(d => {
+        // Cari skor tertinggi untuk juara 1
+        if (d.accumulated_score > maxScore) {
+            maxScore = d.accumulated_score;
+            winnerName = d.name;
+        }
+        // Jika ada player yang akumulasi skornya menyentuh atau melewati -500
+        if (d.accumulated_score <= -500) {
+            isGameOver = true;
+        }
+    });
+
+    if(isGameOver) {
+        title.innerText = `🏆 PERMAINAN SELESAI! JUARA 1: ${winnerName} (Skor Tertinggi: ${maxScore})`;
     } else {
         title.innerText = "🎯 HASIL RONDE & PERHITUNGAN SKOR";
     }
@@ -596,15 +630,19 @@ function handleRoundSummary(data) {
     data.details.forEach(d => {
         const tr = document.createElement('tr');
         tr.style.borderBottom = '1px solid #333';
-        if(d.is_winner) tr.style.background = 'rgba(39, 174, 96, 0.2)';
+        if(d.accumulated_score === maxScore && isGameOver) {
+            tr.style.background = 'rgba(241, 196, 15, 0.2)'; // Highlight Juara 1
+        } else if(d.is_winner) {
+            tr.style.background = 'rgba(39, 174, 96, 0.2)';
+        }
 
         tr.innerHTML = `
-            <td style="padding:8px; text-align:left;"><strong>${d.name}</strong> ${d.is_winner ? '👑' : ''}</td>
+            <td style="padding:8px; text-align:left;"><strong>${d.name}</strong> ${d.accumulated_score === maxScore && isGameOver ? '👑 [JUARA 1]' : (d.is_winner ? '✨' : '')}</td>
             <td style="padding:8px; color:#2ecc71;">+${d.pts_down}</td>
             <td style="padding:8px; color:#e74c3c;">${d.pts_hand}</td>
             <td style="padding:8px; color:#f1c40f;">+${d.bonus_tutupan}</td>
             <td style="padding:8px;">${d.round_total}</td>
-            <td style="padding:8px; font-weight:bold; color:#2ecc71;">${d.accumulated_score}</td>
+            <td style="padding:8px; font-weight:bold; color:${d.accumulated_score <= -500 ? '#e74c3c' : '#2ecc71'};">${d.accumulated_score}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -612,6 +650,7 @@ function handleRoundSummary(data) {
     modal.style.display = 'flex';
 
     let timeLeft = data.delay || 5;
+    if (isGameOver) timeLeft = 15; // Beri waktu lebih lama di layar akhir game
     timerSpan.innerText = timeLeft;
     
     const interval = setInterval(() => {
@@ -621,7 +660,9 @@ function handleRoundSummary(data) {
         }
         if (timeLeft <= 0) {
             clearInterval(interval);
-            modal.style.display = 'none';
+            if (!isGameOver) {
+                modal.style.display = 'none';
+            }
         }
     }, 1000);
 }
