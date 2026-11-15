@@ -7,6 +7,8 @@ let selectedCards = [];
 let myHandCards = []; 
 let draggedIndex = null;
 let lastDeckCount = null;
+let turnTimerInterval = null;
+let remainingTurnTime = 30;
 
 /* =========================================================
    SYSTEM SOUND EFFECT (AUDIO SYNTHESIZER)
@@ -48,15 +50,16 @@ function playSound(type) {
             gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
             osc.start(now);
             osc.stop(now + 0.15);
-        } else if (type === 'success' || type === 'score') {
+        } else if (type === 'success' || type === 'score' || type === 'tutupan') {
             osc.type = 'sine';
             osc.frequency.setValueAtTime(523.25, now);
             osc.frequency.setValueAtTime(659.25, now + 0.08);
             osc.frequency.setValueAtTime(783.99, now + 0.16);
-            gainNode.gain.setValueAtTime(0.25, now);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+            osc.frequency.setValueAtTime(1046.50, now + 0.24);
+            gainNode.gain.setValueAtTime(0.3, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
             osc.start(now);
-            osc.stop(now + 0.35);
+            osc.stop(now + 0.5);
         }
     } catch (e) {
         console.log("Audio play blocked/error:", e);
@@ -64,7 +67,7 @@ function playSound(type) {
 }
 
 ws.onopen = () => {
-    console.log("[WS] Terhubung langsung secara kilat ke server!");
+    console.log("[WS] Terhubung langsung ke server!");
     if (typeof window.notifyServerReady === 'function') {
         window.notifyServerReady();
     }
@@ -103,12 +106,11 @@ ws.onmessage = (event) => {
     } 
     else if (data.type === 'game_update') {
         if (lastDeckCount !== null && data.deck_count < lastDeckCount) {
-            // Kirim ID player yang sedang giliran / cangkul ke fungsi animasi
-            triggerFlyingCardAnimation(data.current_turn_player_id, data.opponents || data.players);
+            triggerPlayerOnlyFlyingAnimation();
         }
         lastDeckCount = data.deck_count;
 
-        const renderDelay = document.getElementById('is-spectator')?.checked ? 400 : 0;
+        const renderDelay = data.is_my_turn ? 0 : 300;
         setTimeout(() => {
             handleGameUpdate(data);
         }, renderDelay);
@@ -125,40 +127,12 @@ ws.onmessage = (event) => {
 };
 
 /* =========================================================
-   ANIMASI FLYING CARD (TARGET SESUAI POSISI PEMAIN / BOT)
+   1. ANIMASI PEMBAGIAN / CANGKULAN HANYA UNTUK PLAYER
    ========================================================= */
-function triggerFlyingCardAnimation(activePlayerId, playersList) {
+function triggerPlayerOnlyFlyingAnimation() {
     playSound('draw');
-    
     const deckSource = document.querySelector('.deck-stack') || document.body;
-    let targetContainer = document.getElementById('my-hand'); // Default ke player utama (bawah)
-
-    // Jika ada info player aktif, tentukan apakah itu kita atau bot di sudut
-    if (activePlayerId) {
-        // Cek apakah activePlayerId milik salah satu lawan di slot (kiri, atas, kanan)
-        const slotMapping = {
-            'opponent-left': 0,
-            'opponent-top': 1,
-            'opponent-right': 2
-        };
-
-        // Jika playersList tersedia, cari indeks lawan
-        if (playersList && Array.isArray(playersList)) {
-            const opponentIndex = playersList.findIndex(op => op.id === activePlayerId);
-            const slotIds = ['opponent-left', 'opponent-top', 'opponent-right'];
-            if (opponentIndex !== -1 && slotIds[opponentIndex]) {
-                const foundSlot = document.getElementById(slotIds[opponentIndex]);
-                if (foundSlot) targetContainer = foundSlot;
-            }
-        } else {
-            // Fallback: Jika tidak terdeteksi presisi, ambil slot acak lawan yang terisi
-            const slots = ['opponent-left', 'opponent-top', 'opponent-right'];
-            const availableSlots = slots.map(id => document.getElementById(id)).filter(el => el && el.children.length > 0);
-            if (availableSlots.length > 0) {
-                targetContainer = availableSlots[Math.floor(Math.random() * availableSlots.length)];
-            }
-        }
-    }
+    const targetContainer = document.getElementById('my-hand');
     
     if (!targetContainer || !deckSource) return;
 
@@ -174,13 +148,13 @@ function triggerFlyingCardAnimation(activePlayerId, playersList) {
     requestAnimationFrame(() => {
         flyer.style.left = `${targetRect.left + (targetRect.width / 2)}px`;
         flyer.style.top = `${targetRect.top + (targetRect.height / 2)}px`;
-        flyer.style.transform = 'scale(0.3) rotate(15deg)';
-        flyer.style.opacity = '0.2';
+        flyer.style.transform = 'scale(0.3) rotate(10deg)';
+        flyer.style.opacity = '0.1';
     });
 
     setTimeout(() => {
         flyer.remove();
-    }, 500);
+    }, 450);
 }
 
 function createLobby() {
@@ -229,6 +203,23 @@ function finishRound() {
         action: 'finish_round',
         room_code: currentRoom
     }));
+}
+
+/* =========================================================
+   5. TOMBOL KELUAR RUANGAN (LEAVE ROOM / GANTI KE BOT)
+   ========================================================= */
+function leaveRoom() {
+    if(confirm("Apakah Anda yakin ingin keluar dari permainan? Permainan Anda akan dilanjutkan oleh Bot.")) {
+        playSound('click');
+        ws.send(JSON.stringify({
+            action: 'leave_room',
+            room_code: currentRoom
+        }));
+        currentRoom = null;
+        document.getElementById('game-container').style.display = 'none';
+        document.getElementById('lobby-container').style.display = 'block';
+        if (turnTimerInterval) clearInterval(turnTimerInterval);
+    }
 }
 
 function handleGameUpdate(state) {
@@ -280,7 +271,9 @@ function handleGameUpdate(state) {
                 
                 cardEl.onclick = () => {
                     playSound('click');
-                    drawCard('discard', card.id);
+                    triggerTargetCardZoomEffect(cardEl, () => {
+                        drawCard('discard', card.id);
+                    });
                 };
 
                 discardDiv.appendChild(cardEl);
@@ -316,7 +309,66 @@ function handleGameUpdate(state) {
         if (turnIndicator) {
             turnIndicator.innerText = statusText + ` | Skor Anda: ${myScore}`;
         }
+
+        manageTurnTimer(isMyTurn && !state.round_ending);
     }
+}
+
+/* =========================================================
+   4. COUNTDOWN TIMER 30 DETIK (VISUAL 5 DETIK TERAKHIR)
+   ========================================================= */
+function manageTurnTimer(isMyTurn) {
+    let timerContainer = document.getElementById('turn-timer-display');
+    if (!timerContainer) {
+        const topBar = document.getElementById('turn-indicator') || document.body;
+        timerContainer = document.createElement('div');
+        timerContainer.id = 'turn-timer-display';
+        timerContainer.style.cssText = "font-weight:bold; font-size:14px; margin-top:4px; transition: color 0.3s;";
+        topBar.parentNode.insertBefore(timerContainer, topBar.nextSibling);
+    }
+
+    if (turnTimerInterval) clearInterval(turnTimerInterval);
+
+    if (!isMyTurn) {
+        timerContainer.innerText = "";
+        return;
+    }
+
+    remainingTurnTime = 30;
+    timerContainer.innerText = `⏱️ Waktu Giliran: ${remainingTurnTime}s`;
+    timerContainer.style.color = "#2ecc71";
+    timerContainer.classList.remove('timer-pulse');
+
+    turnTimerInterval = setInterval(() => {
+        remainingTurnTime -= 1;
+        if (remainingTurnTime > 5) {
+            timerContainer.innerText = `⏱️ Waktu Giliran: ${remainingTurnTime}s`;
+            timerContainer.style.color = "#2ecc71";
+        } else if (remainingTurnTime > 0) {
+            timerContainer.innerText = `⚠️ Waktu Habis dalam: ${remainingTurnTime}s!`;
+            timerContainer.style.color = "#e74c3c";
+            timerContainer.classList.add('timer-pulse');
+            if (remainingTurnTime <= 3) playSound('click');
+        } else {
+            clearInterval(turnTimerInterval);
+            timerContainer.innerText = "⏰ Waktu Habis! Otomatis Melakukan Langkah...";
+            timerContainer.style.color = "#c0392b";
+            autoPerformTimeoutAction();
+        }
+    }, 1000);
+}
+
+function autoPerformTimeoutAction() {
+    const drawBtn = Array.from(document.querySelectorAll('button')).find(el => el.innerText.includes('Cangkul'));
+    if (drawBtn && !drawBtn.disabled) {
+        drawCard('deck');
+    }
+    setTimeout(() => {
+        if (myHandCards.length > 0) {
+            selectedCards = [myHandCards[0].id];
+            discardSelectedCard(false);
+        }
+    }, 500);
 }
 
 function renderOpponentsPositions(opponents, currentTurnPlayerId) {
@@ -510,26 +562,44 @@ function drawCard(source, cardId=null) {
 }
 
 /* =========================================================
-   EFEK FLASH & ZOOM SEBELUM KARTU DITURUNKAN
+   2. ANIMASI ZOOM TEPAT PADA KARTU YANG SEDANG DIPAKAI
    ========================================================= */
-function triggerFlashAndZoomEffect(cardIds, callback) {
+function triggerSpecificCardsZoom(cardIds, callback) {
     playSound('success');
-    cardIds.forEach(id => {
-        const cardEls = document.querySelectorAll('.card-sprite');
-        cardEls.forEach(el => {
-            el.classList.add('anim-flash-zoom');
-        });
+    
+    const allCardEls = document.querySelectorAll('#my-hand .card-sprite');
+    let matchedEls = [];
+
+    myHandCards.forEach((c, idx) => {
+        if (cardIds.includes(c.id)) {
+            if (allCardEls[idx]) {
+                matchedEls.push(allCardEls[idx]);
+            }
+        }
     });
 
+    if (matchedEls.length > 0) {
+        matchedEls.forEach(el => el.classList.add('anim-flash-zoom'));
+        setTimeout(() => {
+            matchedEls.forEach(el => el.classList.remove('anim-flash-zoom'));
+            if (typeof callback === 'function') callback();
+        }, 650);
+    } else {
+        if (typeof callback === 'function') callback();
+    }
+}
+
+function triggerTargetCardZoomEffect(cardEl, callback) {
+    cardEl.classList.add('anim-flash-zoom');
     setTimeout(() => {
         if (typeof callback === 'function') callback();
-    }, 650);
+    }, 600);
 }
 
 function laySeries() {
     if(selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Seri!");
     
-    triggerFlashAndZoomEffect(selectedCards, () => {
+    triggerSpecificCardsZoom(selectedCards, () => {
         ws.send(JSON.stringify({
             action: 'lay_series',
             room_code: currentRoom,
@@ -543,7 +613,7 @@ function laySeries() {
 function layPatahan() {
     if (selectedCards.length < 3) return alert("Pilih minimal 3 kartu untuk Patahan!");
     
-    triggerFlashAndZoomEffect(selectedCards, () => {
+    triggerSpecificCardsZoom(selectedCards, () => {
         ws.send(JSON.stringify({
             action: 'lay_patahan',
             room_code: currentRoom,
@@ -607,6 +677,38 @@ function renderCardSprite(card) {
     return div;
 }
 
+/* =========================================================
+   3. ANIMASI TUTUP (POPUP BESAR "TUTUP!" + ZOOM KARTU + BONUS POIN)
+   ========================================================= */
+function showTutupanCelebration(winnerName, tutupanCard, bonusPoints) {
+    playSound('tutupan');
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'tutupan-overlay';
+    
+    let cardHtml = '';
+    if (tutupanCard) {
+        const dummyDiv = renderCardSprite(tutupanCard);
+        cardHtml = `<div class="tutupan-card-zoom">${dummyDiv.outerHTML}</div>`;
+    }
+
+    overlay.innerHTML = `
+        <div class="tutupan-popup-content">
+            <h1 class="tutupan-title">🔥 TUTUP! 🔥</h1>
+            <p style="font-size:18px; color:#f1c40f; margin:5px 0;">Pemenang Ronde: <strong>${winnerName}</strong></p>
+            ${cardHtml}
+            <div class="tutupan-bonus-badge">+${bonusPoints} Poin Bonus Tutupan!</div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 500);
+    }, 2800);
+}
+
 function handleRoundSummary(data) {
     const modal = document.getElementById('score-modal');
     const tbody = document.getElementById('modal-score-body');
@@ -619,9 +721,13 @@ function handleRoundSummary(data) {
     
     let maxScore = -Infinity;
     let winnerName = "";
+    let roundWinnerDetail = null;
     let isGameOver = data.game_ended || false;
 
     data.details.forEach(d => {
+        if (d.is_winner) {
+            roundWinnerDetail = d;
+        }
         if (d.accumulated_score > maxScore) {
             maxScore = d.accumulated_score;
             winnerName = d.name;
@@ -630,6 +736,10 @@ function handleRoundSummary(data) {
             isGameOver = true;
         }
     });
+
+    if (roundWinnerDetail && roundWinnerDetail.bonus_tutupan > 0) {
+        showTutupanCelebration(roundWinnerDetail.name, roundWinnerDetail.tutupan_card, roundWinnerDetail.bonus_tutupan);
+    }
 
     if(isGameOver) {
         title.innerText = `🏆 PERMAINAN SELESAI! JUARA 1: ${winnerName} (Skor Tertinggi: ${maxScore})`;
