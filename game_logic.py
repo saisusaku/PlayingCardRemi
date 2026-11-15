@@ -166,7 +166,9 @@ class RemiGameState:
         self.turn_start_time = 0
         self.turn_duration = 30
         
+        # Waktu tunggu antar ronde yang konsisten untuk player dan bot
         self.round_ending = False
+        self.round_end_timestamp = 0
         self.pending_winner_sid = None
         self.pending_tutupan_card = None
         self.joker_allowed_in_melds = False
@@ -214,6 +216,7 @@ class RemiGameState:
         self.deck = create_deck(self.joker_option)
         self.discard_pile = []
         self.round_ending = False
+        self.round_end_timestamp = 0
         self.pending_winner_sid = None
         self.pending_tutupan_card = None
         self.joker_allowed_in_melds = False
@@ -434,6 +437,7 @@ class RemiGameState:
 
         if is_tutupan or len(p['hand']) == 0:
             self.round_ending = True
+            self.round_end_timestamp = time.time()
             self.pending_winner_sid = sid
             self.pending_tutupan_card = card
             self.joker_allowed_in_melds = False
@@ -443,6 +447,7 @@ class RemiGameState:
 
         if len(self.deck) == 0:
             self.round_ending = True
+            self.round_end_timestamp = time.time()
             self.pending_winner_sid = None
             self.pending_tutupan_card = None
             self.joker_allowed_in_melds = True
