@@ -1,4 +1,5 @@
 import random
+import time
 from itertools import combinations
 
 SUITS = ['clubs', 'spades', 'hearts', 'diamonds']
@@ -162,13 +163,16 @@ class RemiGameState:
         self.starter_must_discard = False
         self.admin_sid = None
         
+        self.turn_start_time = 0
+        self.turn_duration = 30
+        
         self.round_ending = False
         self.pending_winner_sid = None
         self.pending_tutupan_card = None
         self.joker_allowed_in_melds = False
 
     def add_player(self, sid, name, is_spectator=False):
-        if not self.admin_sid:
+        if not self.admin_sid and not is_spectator:
             self.admin_sid = sid
 
         if is_spectator:
@@ -185,6 +189,20 @@ class RemiGameState:
                 'hand': [], 'melds': {'series': [], 'patahan': []},
                 'score': 0, 'is_bot': False
             }
+
+    def remove_player(self, sid):
+        if sid in self.players:
+            p = self.players[sid]
+            if not p['is_spectator'] and sid in self.player_order:
+                p['is_bot'] = True
+                p['name'] = f"{p['name']} (Bot)"
+            elif sid in self.spectators:
+                self.spectators.remove(sid)
+            del self.players[sid]
+
+            active_players = [s for s in self.player_order if not self.players[s]['is_bot']]
+            if sid == self.admin_sid and active_players:
+                self.admin_sid = active_players[0]
 
     def reset_game_scores(self):
         for p in self.players.values():
@@ -224,6 +242,7 @@ class RemiGameState:
 
         self.has_drawn = True
         self.starter_must_discard = True
+        self.turn_start_time = time.time()
 
     def get_current_player_sid(self):
         if not self.player_order:
@@ -234,6 +253,27 @@ class RemiGameState:
         self.has_drawn = False
         self.starter_must_discard = False
         self.current_turn_index = (self.current_turn_index + 1) % len(self.player_order)
+        self.turn_start_time = time.time()
+
+    def check_turn_timeout(self):
+        if self.game_over or self.round_ending or not self.player_order:
+            return False, None
+
+        elapsed = time.time() - self.turn_start_time
+        if elapsed > self.turn_duration:
+            current_sid = self.get_current_player_sid()
+            p = self.players.get(current_sid)
+            if not p:
+                return False, None
+
+            if not self.has_drawn and not self.starter_must_discard and len(self.deck) > 0:
+                self.draw_from_deck(current_sid)
+            
+            if p['hand']:
+                card_to_discard = p['hand'][0]
+                self.discard_card(current_sid, card_to_discard['id'])
+                return True, f"Waktu habis! {p['name']} otomatis jalan."
+        return False, None
 
     def draw_from_deck(self, sid):
         if self.round_ending:
@@ -504,14 +544,14 @@ class RemiGameState:
                 'bonus_tutupan': bonus_tutupan,
                 'round_total': round_total,
                 'accumulated_score': p['score'],
-                'is_winner': (sid == winner_sid)
+                'is_winner': (sid == winner_sid),
+                'tutupan_card': tutupan_card if (sid == winner_sid) else None
             })
 
         highest_player = max(self.players.values(), key=lambda x: x['score'])
         self.highest_scorer_prev = highest_player['sid']
         self.first_round = False
         
-        # Game selesai jika ada yang mencapai >= 500 (menang) atau <= -500 (kalah)
         game_ended = any(p['score'] >= 500 or p['score'] <= -500 for p in self.players.values() if not p['is_spectator'])
         
         return score_details, game_ended
