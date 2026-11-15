@@ -94,7 +94,6 @@ button:hover { background: #219150; }
     text-align: center;
     max-width: 170px;
     box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    transition: all 0.3s ease;
 }
 
 .opponent-card strong {
@@ -166,7 +165,6 @@ button:hover { background: #219150; }
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: all 0.3s ease;
 }
 
 .melds-container {
@@ -208,55 +206,6 @@ button:hover { background: #219150; }
 
 .card-sprite.anim-draw { animation: drawCardAnim 0.25s ease-out; }
 .card-sprite.anim-discard { animation: discardCardAnim 0.25s ease-out; }
-
-/* =========================================================
-   TAMBAHAN ANIMASI & GLOWING EDGE (GILIRAN / JUICY)
-   ========================================================= */
-
-@keyframes edgeGlowPulse {
-    0% {
-        box-shadow: 0 0 5px #f1c40f, inset 0 0 5px rgba(241, 196, 15, 0.2);
-        border-color: #f1c40f;
-    }
-    50% {
-        box-shadow: 0 0 20px #f1c40f, inset 0 0 10px rgba(241, 196, 15, 0.6);
-        border-color: #ffeaa7;
-    }
-    100% {
-        box-shadow: 0 0 5px #f1c40f, inset 0 0 5px rgba(241, 196, 15, 0.2);
-        border-color: #f1c40f;
-    }
-}
-
-.active-turn-glow {
-    border: 2px solid #f1c40f !important;
-    animation: edgeGlowPulse 1.2s infinite ease-in-out;
-    border-radius: 12px;
-}
-
-.flying-card-clone {
-    position: fixed;
-    width: 68px;
-    height: 87px;
-    background-image: url('../images/card_sprite.png');
-    background-size: 1045px 408px;
-    border-radius: 4px;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.7);
-    z-index: 99999;
-    pointer-events: none;
-    transition: all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-@keyframes flashAndZoom {
-    0% { transform: scale(1); filter: brightness(1); }
-    30% { transform: scale(1.4) translateY(-35px); filter: brightness(2.2) drop-shadow(0 0 25px #f1c40f); z-index: 9999; }
-    70% { transform: scale(1.4) translateY(-35px); filter: brightness(2) drop-shadow(0 0 30px #ffffff); z-index: 9999; }
-    100% { transform: scale(1) translateY(0); filter: brightness(1); }
-}
-
-.card-sprite.anim-flash-zoom {
-    animation: flashAndZoom 0.7s ease-in-out;
-}
 
 /* SPRITE KARTU UTAMA */
 .card-sprite {
@@ -305,4 +254,69 @@ button:hover { background: #219150; }
     gap: 8px;
     justify-content: center;
     margin-top: 5px;
+}
+
+/* ANIMASI TIMER PULSE SAAT 5 DETIK TERAKHIR */
+@keyframes timerPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.08); opacity: 0.7; color: #e74c3c; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.timer-pulse {
+    animation: timerPulse 0.6s infinite ease-in-out;
+}
+
+/* OVERLAY PERAYAAN TUTUP */
+.tutupan-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.82);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+    transition: opacity 0.5s ease;
+    backdrop-filter: blur(5px);
+}
+
+.tutupan-popup-content {
+    background: linear-gradient(135deg, #2c3e50, #1a252f);
+    border: 3px solid #f1c40f;
+    border-radius: 20px;
+    padding: 30px 50px;
+    text-align: center;
+    box-shadow: 0 0 50px rgba(241, 196, 15, 0.6);
+    animation: popUpZoom 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popUpZoom {
+    0% { transform: scale(0.3); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.tutupan-title {
+    font-size: 42px;
+    color: #f1c40f;
+    margin: 0 0 10px 0;
+    text-shadow: 0 2px 10px rgba(241, 196, 15, 0.8);
+    letter-spacing: 2px;
+}
+
+.tutupan-card-zoom {
+    margin: 20px auto;
+    transform: scale(1.6);
+    filter: drop-shadow(0 0 15px rgba(255,255,255,0.8));
+}
+
+.tutupan-bonus-badge {
+    background: #27ae60;
+    color: white;
+    padding: 8px 20px;
+    border-radius: 30px;
+    font-weight: bold;
+    font-size: 16px;
+    margin-top: 15px;
+    display: inline-block;
+    box-shadow: 0 4px 15px rgba(39, 174, 96, 0.4);
 }
