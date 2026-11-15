@@ -126,9 +126,6 @@ ws.onmessage = (event) => {
     }
 };
 
-/* =========================================================
-   1. ANIMASI PEMBAGIAN / CANGKULAN HANYA UNTUK PLAYER
-   ========================================================= */
 function triggerPlayerOnlyFlyingAnimation() {
     playSound('draw');
     const deckSource = document.querySelector('.deck-stack') || document.body;
@@ -205,9 +202,6 @@ function finishRound() {
     }));
 }
 
-/* =========================================================
-   5. TOMBOL KELUAR RUANGAN (LEAVE ROOM / GANTI KE BOT)
-   ========================================================= */
 function leaveRoom() {
     if(confirm("Apakah Anda yakin ingin keluar dari permainan? Permainan Anda akan dilanjutkan oleh Bot.")) {
         playSound('click');
@@ -314,9 +308,6 @@ function handleGameUpdate(state) {
     }
 }
 
-/* =========================================================
-   4. COUNTDOWN TIMER 30 DETIK (VISUAL 5 DETIK TERAKHIR)
-   ========================================================= */
 function manageTurnTimer(isMyTurn) {
     let timerContainer = document.getElementById('turn-timer-display');
     if (!timerContainer) {
@@ -483,6 +474,7 @@ function renderHandUI() {
         const cardEl = renderCardSprite(card);
         cardEl.setAttribute('draggable', 'true');
         cardEl.dataset.index = index;
+        cardEl.dataset.cardid = card.id;
 
         if (selectedCards.includes(card.id)) {
             cardEl.classList.add('selected');
@@ -562,19 +554,17 @@ function drawCard(source, cardId=null) {
 }
 
 /* =========================================================
-   2. ANIMASI ZOOM TEPAT PADA KARTU YANG SEDANG DIPAKAI
+   2. ANIMASI SERI & PATAHAN (ZOOM TEPAT PADA KARTU TERPILIH)
    ========================================================= */
 function triggerSpecificCardsZoom(cardIds, callback) {
     playSound('success');
     
-    const allCardEls = document.querySelectorAll('#my-hand .card-sprite');
+    const cardEls = document.querySelectorAll('#my-hand .card-sprite');
     let matchedEls = [];
 
-    myHandCards.forEach((c, idx) => {
-        if (cardIds.includes(c.id)) {
-            if (allCardEls[idx]) {
-                matchedEls.push(allCardEls[idx]);
-            }
+    cardEls.forEach(el => {
+        if (cardIds.includes(el.dataset.cardid)) {
+            matchedEls.push(el);
         }
     });
 
@@ -769,7 +759,8 @@ function handleRoundSummary(data) {
 
     modal.style.display = 'flex';
 
-    let timeLeft = data.delay || 5;
+    // Waktu tunggu jeda antar ronde (6 detik) agar bot dan player memiliki waktu jeda yang pas
+    let timeLeft = data.delay || 6;
     if (isGameOver) timeLeft = 15;
     timerSpan.innerText = timeLeft;
     
